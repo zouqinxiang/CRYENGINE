@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -127,7 +127,8 @@ public:
 	virtual void SerializeLTL(TSerialize ser) override;
 	virtual void Update(SEntityUpdateContext& ctx, int) override;
 	virtual void PostUpdate( float frameTime ) override;
-	virtual void ProcessEvent(SEntityEvent& event) override;
+	virtual void ProcessEvent(const SEntityEvent& event) override;
+	virtual Cry::Entity::EventFlags GetEventMask() const override;
 	virtual void HandleEvent(const SGameObjectEvent &evt) override;
 	virtual void SetChannelId(uint16 id) override {}
 	virtual void GetMemoryUsage(ICrySizer * s) const override;
@@ -146,7 +147,7 @@ public:
 	virtual void MeleeAttack(bool bShort = false) override;
 	virtual bool CanMeleeAttack() const override;
 
-	virtual IFireMode *GetMeleeFireMode() const override { CRY_ASSERT_MESSAGE(0, "DEPRECATED FUNCTIONALITY: use GetMelee() instead"); return NULL; }
+	virtual IFireMode *GetMeleeFireMode() const override { CRY_ASSERT(0, "DEPRECATED FUNCTIONALITY: use GetMelee() instead"); return NULL; }
 	CMelee* GetMelee() const { return m_melee; }
 
 	virtual void Select(bool select) override;

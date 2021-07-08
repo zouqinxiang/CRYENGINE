@@ -1,15 +1,20 @@
-REM Tested with Python35
-REM Assumes Python 3.5 installed in c:\Python35
+@ECHO OFF
 
-REM PyInstaller must be installed before
-REM To Install PyInstaller run:
-REM  c:\Python35\Scripts\pip.exe install PyInstaller
+REM tested with Python37
 
+REM install required modules
+py -3 -m pip install PyInstaller pypiwin32
 
-REM Build CrySelect
-c:\Python35\Scripts\PyInstaller.exe cryselect.py --onefile --icon editor_icon16.ico
-copy /Y dist\cryselect.exe cryselect.exe
+REM clean temp
+rmdir bin /s /q
+rmdir dist /s /q
+rmdir build /s /q
 
-REM Build CryRun
-c:\Python35\Scripts\PyInstaller.exe cryrun.py --onefile --icon editor_icon16.ico
-copy /Y dist\cryrun.exe cryrun.exe
+REM build CrySelect
+py -3 -m PyInstaller cryselect.spec
+
+REM build CryRun
+py -3 -m PyInstaller cryrun.spec
+
+REM deploy
+xcopy /Y /S dist\*.* bin\

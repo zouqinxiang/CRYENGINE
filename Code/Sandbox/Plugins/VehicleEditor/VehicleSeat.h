@@ -1,11 +1,5 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
-
-#ifndef __VehicleSeat_h__
-#define __VehicleSeat_h__
-
-#if _MSC_VER > 1000
-	#pragma once
-#endif
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
+#pragma once
 
 #include <list>
 
@@ -39,8 +33,8 @@ public:
 	//////////////////////////////////////////////////////////////////////////
 	bool Init(CBaseObject* prev, const string& file);
 	void Done();
-	void InitVariables() {};
-	void Display(DisplayContext& disp);
+	void InitVariables() {}
+	void Display(CObjectRenderHelper& objRenderHelper);
 
 	bool HitTest(HitContext& hc);
 
@@ -73,20 +67,16 @@ public:
 	//! Add Weapon to Seat
 	void AddWeapon(int weaponType, CVehicleWeapon* pWeap, IVariable* pVar = 0);
 
-	void OnObjectEvent(CBaseObject* node, int event);
+	void OnObjectEvent(const CBaseObject* pObject, const CObjectEvent& event);
 
 	void OnSetPart(IVariable* pVar);
 
 protected:
 	CVehicleSeat();
-	void DeleteThis() { delete this; };
-
-	void UpdateFromVar();
+	void DeleteThis() { delete this; }
 
 	CVehiclePrototype* m_pVehicle;
 	CVehiclePart*      m_pPart;
-
-	IVariable*         m_pVar;
 };
 
 /*!
@@ -95,10 +85,8 @@ protected:
 class CVehicleSeatClassDesc : public CObjectClassDesc
 {
 public:
-	ObjectType     GetObjectType()   { return OBJTYPE_OTHER; };
-	const char*    ClassName()       { return "VehicleSeat"; };
-	const char*    Category()        { return ""; };
-	CRuntimeClass* GetRuntimeClass() { return RUNTIME_CLASS(CVehicleSeat); };
+	ObjectType     GetObjectType()   { return OBJTYPE_OTHER; }
+	const char*    ClassName()       { return "VehicleSeat"; }
+	const char*    Category()        { return ""; }
+	CRuntimeClass* GetRuntimeClass() { return RUNTIME_CLASS(CVehicleSeat); }
 };
-
-#endif // __VehicleSeat_h__

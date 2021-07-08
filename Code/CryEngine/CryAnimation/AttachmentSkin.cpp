@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "stdafx.h"
 #include "AttachmentSkin.h"
@@ -33,6 +33,8 @@ uint32 CAttachmentSKIN::Immediate_AddBinding( IAttachmentObject* pIAttachmentObj
 	if (pISkin==0)
 		CryFatalError("CryAnimation: if you create the binding for a Skin-Attachment, then you have to pass the pointer to an ISkin as well");
 
+	CRY_ASSERT(pIAttachmentObject->GetAttachmentType() == IAttachmentObject::eAttachment_SkinMesh);
+
 	uint32 nLogWarnings = (nLoadingFlags&CA_DisableLogWarnings)==0;
 	CSkin* pCSkinModel = (CSkin*)pISkin;
 
@@ -48,8 +50,10 @@ uint32 CAttachmentSKIN::Immediate_AddBinding( IAttachmentObject* pIAttachmentObj
 	CCharInstance* pInstanceSkel = m_pAttachmentManager->m_pSkelInstance;
 	CDefaultSkeleton* pDefaultSkeleton = pInstanceSkel->m_pDefaultSkeleton;
 
+#ifdef EDITOR_PCDEBUGCODE
 	const char* pSkelFilePath = pDefaultSkeleton->GetModelFilePath();
 	const char* pSkinFilePath = m_pModelSkin->GetModelFilePath();
+#endif
 
 	uint32 numJointsSkel = pDefaultSkeleton->m_arrModelJoints.size();
 	uint32 numJointsSkin = m_pModelSkin->m_arrModelJoints.size();
@@ -80,10 +84,12 @@ uint32 CAttachmentSKIN::Immediate_AddBinding( IAttachmentObject* pIAttachmentObj
 
 	if (NotMatchingNames)
 	{
-		if (pInstanceSkel->m_CharEditMode || nLoadingFlags & CA_ImmediateMode)
+		// For now limited to CharEdit
+		if (pInstanceSkel->m_CharEditMode || (nLoadingFlags & CA_CharEditModel))
 		{
-		  //for now limited to CharEdit
-			RecreateDefaultSkeleton(pInstanceSkel,nLoadingFlags); 
+			CRY_ASSERT(pInstanceSkel->m_CharEditMode);
+			CRY_ASSERT(nLoadingFlags & CA_CharEditModel);
+			RecreateDefaultSkeleton(pInstanceSkel, nLoadingFlags | CA_CharEditModel);
 		}
 		else
 		{
@@ -91,12 +97,15 @@ uint32 CAttachmentSKIN::Immediate_AddBinding( IAttachmentObject* pIAttachmentObj
 			{
 				CryLogAlways("SKEL: %s",pDefaultSkeleton->GetModelFilePath() );
 				CryLogAlways("SKIN: %s",m_pModelSkin->GetModelFilePath() );
+
+#if !defined(EXCLUDE_NORMAL_LOG)
 				uint32 numJointCount = pDefaultSkeleton->GetJointCount();
 				for (uint32 i=0; i<numJointCount; i++)
 				{
 					const char* pJointName = pDefaultSkeleton->GetJointNameByID(i);
 					CryLogAlways("%03d JointName: %s",i,pJointName );
 				}
+#endif
 			}
 
 			// Free the new attachment as we cannot use it
@@ -119,47 +128,54 @@ uint32 CAttachmentSKIN::Immediate_AddBinding( IAttachmentObject* pIAttachmentObj
 	}
 	
 	SAFE_RELEASE(m_pIAttachmentObject);
-	m_pIAttachmentObject=pIAttachmentObject;
+	m_pIAttachmentObject = pIAttachmentObject;
+
+	static_cast<CSKINAttachment*>(m_pIAttachmentObject)->m_pIAttachmentSkin = this;
+
 	return 1; 
 }
 
-void CAttachmentSKIN::Immediate_ClearBinding(uint32 nLoadingFlags) 
-{ 
+void CAttachmentSKIN::Immediate_ClearBinding(uint32 nLoadingFlags)
+{
 	if (m_pIAttachmentObject)
 	{
+		CRY_ASSERT(static_cast<CSKINAttachment*>(m_pIAttachmentObject)->m_pIAttachmentSkin == this);
 		m_pIAttachmentObject->Release();
 		m_pIAttachmentObject = 0;
 		ReleaseModelSkin();
 
-		if (nLoadingFlags&CA_SkipSkelRecreation)
+		if (nLoadingFlags & CA_SkipSkelRecreation)
 			return;
-		//for now limited to CharEdit
+
+		// For now limited to CharEdit
 		CCharInstance* pInstanceSkel = m_pAttachmentManager->m_pSkelInstance;
-		if (pInstanceSkel->m_CharEditMode)
-			RecreateDefaultSkeleton(pInstanceSkel,CA_CharEditModel|nLoadingFlags); 
+		if (pInstanceSkel->m_CharEditMode || (nLoadingFlags & CA_CharEditModel))
+		{
+			CRY_ASSERT(pInstanceSkel->m_CharEditMode);
+			CRY_ASSERT(nLoadingFlags & CA_CharEditModel);
+			RecreateDefaultSkeleton(pInstanceSkel, nLoadingFlags | CA_CharEditModel);
+		}
 	}
 }; 
 
-void CAttachmentSKIN::RecreateDefaultSkeleton(CCharInstance* pInstanceSkel, uint32 nLoadingFlags) 
+void CAttachmentSKIN::RecreateDefaultSkeleton(CCharInstance* pCharacter, uint32 loadingFlags) 
 {
-	const CDefaultSkeleton* const pDefaultSkeleton = pInstanceSkel->m_pDefaultSkeleton;
-
-	const char* pOriginalFilePath = pDefaultSkeleton->GetModelFilePath();
-	if (pDefaultSkeleton->GetModelFilePathCRC64() && pOriginalFilePath[0]=='_')
+	const char* originalSkeletonFilename = pCharacter->m_pDefaultSkeleton->GetModelFilePath();
+	if (pCharacter->m_pDefaultSkeleton->GetModelFilePathCRC64() != 0)
 	{
-		pOriginalFilePath++; // All extended skeletons have an '_' in front of the filepath to not confuse them with regular skeletons.
+		CRY_ASSERT(originalSkeletonFilename[0] == '_');
+		originalSkeletonFilename++; // All extended skeletons have an '_' in front of the filepath to not confuse them with regular skeletons.
 	}
 
-	CDefaultSkeleton* pOrigDefaultSkeleton = g_pCharacterManager->CheckIfModelSKELLoaded(pOriginalFilePath,nLoadingFlags);
-	if (!pOrigDefaultSkeleton)
+	CDefaultSkeleton* pOriginalSkeleton = g_pCharacterManager->CheckIfModelSKELLoaded(originalSkeletonFilename,loadingFlags);
+	if (!pOriginalSkeleton)
 	{
 		return;
 	}
 
-	pOrigDefaultSkeleton->SetKeepInMemory(true);
+	pOriginalSkeleton->SetKeepInMemory(true);
 
 	std::vector<const char*> mismatchingSkins;
-	uint64 nExtendedCRC64 = CCrc32::ComputeLowercase(pOriginalFilePath);
 	for (auto&& pAttachment : m_pAttachmentManager->m_arrAttachments)
 	{
 		if (pAttachment->GetType() != CA_SKIN)
@@ -173,15 +189,13 @@ void CAttachmentSKIN::RecreateDefaultSkeleton(CCharInstance* pInstanceSkel, uint
 			continue;
 		}
 
-		const char* pSkinFilename = pSkin->GetModelFilePath();
-		mismatchingSkins.push_back(pSkinFilename);
-		nExtendedCRC64 += CCrc32::ComputeLowercase(pSkinFilename);
+		mismatchingSkins.push_back(pSkin->GetModelFilePath());
 	}
 
-	CDefaultSkeleton* const pExtDefaultSkeleton = g_pCharacterManager->CreateExtendedSkel(pInstanceSkel, pOrigDefaultSkeleton, nExtendedCRC64, mismatchingSkins, nLoadingFlags); 
-	if (pExtDefaultSkeleton)
+	CDefaultSkeleton* const pExtendedSkeleton = g_pCharacterManager->CreateExtendedSkel(pOriginalSkeleton, mismatchingSkins, pCharacter->GetIMaterial(), loadingFlags);
+	if (pExtendedSkeleton)
 	{
-		pInstanceSkel->RuntimeInit(pExtDefaultSkeleton);
+		pCharacter->RuntimeInit(pExtendedSkeleton);
 		m_pAttachmentManager->m_TypeSortingRequired++;
 		m_pAttachmentManager->UpdateAllRemapTables();
 	}
@@ -199,7 +213,6 @@ void CAttachmentSKIN::UpdateRemapTable()
 	const char* pSkelFilePath = pDefaultSkeleton->GetModelFilePath();
 	const char* pSkinFilePath = m_pModelSkin->GetModelFilePath();
 
-	uint32 numJointsSkel = pDefaultSkeleton->m_arrModelJoints.size();
 	uint32 numJointsSkin = m_pModelSkin->m_arrModelJoints.size();
 
 	m_arrRemapTable.resize(numJointsSkin, 0);
@@ -257,10 +270,15 @@ float CAttachmentSKIN::GetExtent(EGeomForm eForm)
 	return 0.f;
 }
 
-void CAttachmentSKIN::GetRandomPos(PosNorm& ran, CRndGen& seed, EGeomForm eForm) const
+void CAttachmentSKIN::GetRandomPoints(Array<PosNorm> points, CRndGen& seed, EGeomForm eForm) const
 {
 	int nLOD = m_pModelSkin->SelectNearestLoadedLOD(0);
 	IRenderMesh* pMesh = m_pModelSkin->GetIRenderMesh(nLOD);
+	if (!pMesh)
+	{
+		points.fill(ZERO);
+		return;
+	}
 
 	SSkinningData* pSkinningData = NULL;
 	int nFrameID = gEnv->pRenderer->EF_GetSkinningPoolID();
@@ -274,7 +292,7 @@ void CAttachmentSKIN::GetRandomPos(PosNorm& ran, CRndGen& seed, EGeomForm eForm)
 		}
 	}
 
-	pMesh->GetRandomPos(ran, seed, eForm, pSkinningData);
+	pMesh->GetRandomPoints(points, seed, eForm, pSkinningData);
 }
 
 const QuatTS CAttachmentSKIN::GetAttWorldAbsolute() const 
@@ -394,15 +412,13 @@ _smart_ptr<IRenderMesh> CAttachmentSKIN::CreateVertexAnimationRenderMesh(uint lo
 	m_pRenderMeshsSW[id] = g_pIRenderer->CreateRenderMeshInitialized(
 		NULL
 		, pIStaticRenderMesh->GetVerticesCount()
-		, eVF_P3F_C4B_T2F
+		, EDefaultInputLayouts::P3F_C4B_T2F
 		, NULL
 		, pIStaticRenderMesh->GetIndicesCount()
 		, prtTriangleList
 		, "Character"
 		, m_sSoftwareMeshName.c_str()
 		, eRMT_Transient);
-
-	m_pRenderMeshsSW[id]->SetMeshLod(lod);
 
 	TRenderChunkArray& chunks = pIStaticRenderMesh->GetChunks();
 	TRenderChunkArray  nchunks;
@@ -460,7 +476,7 @@ void CAttachmentSKIN::CullVertexFrames(const SRenderingPassInfo& passInfo, float
 	}
 }
 
-void CAttachmentSKIN::DrawAttachment(SRendParams& RendParams, const SRenderingPassInfo &passInfo, const Matrix34& rWorldMat34, f32 fZoomFactor)
+void CAttachmentSKIN::RenderAttachment(SRendParams& RendParams, const SRenderingPassInfo &passInfo)
 {
 	//-----------------------------------------------------------------------------
 	//---              map logical LOD to render LOD                            ---
@@ -485,8 +501,6 @@ void CAttachmentSKIN::DrawAttachment(SRendParams& RendParams, const SRenderingPa
 //	extern f32 g_YLine;
 //	g_pAuxGeom->Draw2dLabel( 1,g_YLine, 1.3f, fColor, false,"CSkin:  numLODs: %d  nLodLevel: %d   nRenderLOD: %d   Model: %s",numLODs, RendParams.nLod, nRenderLOD, m_pModelSkin->GetModelFilePath() ); g_YLine+=0x10;
 
-	Matrix34 FinalMat34 = rWorldMat34;
-	RendParams.pMatrix = &FinalMat34;
 	RendParams.pInstance = this;
 	RendParams.pMaterial = (IMaterial*)m_pIAttachmentObject->GetReplacementMaterial(nRenderLOD); //the Replacement-Material has priority
 	if (RendParams.pMaterial==0)
@@ -503,13 +517,13 @@ void CAttachmentSKIN::DrawAttachment(SRendParams& RendParams, const SRenderingPa
 	//---------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------
 	//---------------------------------------------------------------------------------------------
-	CRenderObject* pObj = g_pIRenderer->EF_GetObject_Temp(passInfo.ThreadID());
+	CRenderObject* pObj = passInfo.GetIRenderView()->AllocateTemporaryRenderObject();
 	if (!pObj)
 		return;
 
 	pObj->m_pRenderNode = RendParams.pRenderNode;
 	pObj->m_editorSelectionID = RendParams.nEditorSelectionID;
-	uint64 uLocalObjFlags = pObj->m_ObjFlags;
+	ERenderObjectFlags uLocalObjFlags = pObj->m_ObjFlags;
 
 	//check if it should be drawn close to the player
 	CCharInstance* pMaster	=	m_pAttachmentManager->m_pSkelInstance;
@@ -524,7 +538,7 @@ void CAttachmentSKIN::DrawAttachment(SRendParams& RendParams, const SRenderingPa
 
 	pObj->m_fAlpha = RendParams.fAlpha;
 	pObj->m_fDistance =	RendParams.fDistance;
-	pObj->m_II.m_AmbColor = RendParams.AmbientColor;
+	pObj->SetAmbientColor(RendParams.AmbientColor);
 
 	uLocalObjFlags |= RendParams.dwFObjFlags;
 
@@ -542,10 +556,10 @@ void CAttachmentSKIN::DrawAttachment(SRendParams& RendParams, const SRenderingPa
 	if (bCheckMotion)
 		uLocalObjFlags |= FOB_MOTION_BLUR;
 
-	assert(RendParams.pMatrix);
+	CRY_ASSERT(RendParams.pMatrix);
 	Matrix34 RenderMat34 = (*RendParams.pMatrix);
-	pObj->m_II.m_Matrix = RenderMat34;
-  pObj->m_nClipVolumeStencilRef = RendParams.nClipVolumeStencilRef;
+	pObj->SetMatrix(RenderMat34);
+	pObj->m_nClipVolumeStencilRef = RendParams.nClipVolumeStencilRef;
 	pObj->m_nTextureID = RendParams.nTextureID;
 
 	pObj->m_nMaterialLayers = RendParams.nMaterialLayersBlend;
@@ -575,7 +589,8 @@ void CAttachmentSKIN::DrawAttachment(SRendParams& RendParams, const SRenderingPa
 		pObj->m_ObjFlags |= FOB_ALLOW_TESSELLATION;
 	}
 
-	pObj->m_nSort = fastround_positive(RendParams.fDistance * 2.0f);
+	CRY_ASSERT(RendParams.fDistance * 2.0f <= std::numeric_limits<decltype(CRenderObject::m_nSort)>::max());
+	pObj->m_nSort = HalfFlip(CryConvertFloatToHalf(RendParams.fDistance * 2.0f));
 
 	const float SORT_BIAS_AMOUNT = 1.f;
 	if(pMaster->m_rpFlags & CS_FLAG_BIAS_SKIN_SORT_DIST)
@@ -584,10 +599,16 @@ void CAttachmentSKIN::DrawAttachment(SRendParams& RendParams, const SRenderingPa
 	}
 
 	// get skinning data		
-	static ICVar* cvar_gdMorphs = gEnv->pConsole->GetCVar("r_ComputeSkinningMorphs");
-	static ICVar* cvar_gd = gEnv->pConsole->GetCVar("r_ComputeSkinning");
-	bool bUseGPUComputeDeformation = (nRenderLOD == 0) && (cvar_gd && cvar_gd->GetIVal()) && m_AttFlags & FLAGS_ATTACH_COMPUTE_SKINNING;
-	bool bUseCPUDeformation = !bUseGPUComputeDeformation && (nRenderLOD == 0) && ShouldSwSkin() && (Console::GetInst().ca_vaEnable != 0);
+	static ICVar* cvar_gd         = gEnv->pConsole->GetCVar("r_ComputeSkinning");
+	static ICVar* cvar_gdMorphs   = gEnv->pConsole->GetCVar("r_ComputeSkinningMorphs");
+	static ICVar* cvar_gdTangents = gEnv->pConsole->GetCVar("r_ComputeSkinningTangents");
+	
+	bool bAllowGPUComputeDeformation = (cvar_gd         && (cvar_gd        ->GetIVal() == 2)) || (m_AttFlags & FLAGS_ATTACH_COMPUTE_SKINNING);
+	bool bAllowGPUComputePreMorphs   = (cvar_gdMorphs   && (cvar_gdMorphs  ->GetIVal() == 2)) || (m_AttFlags & FLAGS_ATTACH_COMPUTE_SKINNING_PREMORPHS);
+	bool bAllowGPUComputeTagent      = (cvar_gdTangents && (cvar_gdTangents->GetIVal() == 2)) || (m_AttFlags & FLAGS_ATTACH_COMPUTE_SKINNING_TANGENTS);
+
+	bool bUseGPUComputeDeformation = (nRenderLOD == 0) && (cvar_gd && cvar_gd->GetIVal()) && bAllowGPUComputeDeformation;
+	bool bUseCPUDeformation        = !bUseGPUComputeDeformation && (nRenderLOD == 0) && ShouldSwSkin() && (Console::GetInst().ca_vaEnable != 0);
 
 	IF (!bUseCPUDeformation, 1) 
 		pObj->m_ObjFlags |= FOB_SKINNED;
@@ -602,12 +623,10 @@ void CAttachmentSKIN::DrawAttachment(SRendParams& RendParams, const SRenderingPa
 		}
 	}
 
-	pD->m_pSkinningData = GetVertexTransformationData(bUseCPUDeformation, nRenderLOD);
+	pD->m_pSkinningData = GetVertexTransformationData(bUseCPUDeformation, nRenderLOD, passInfo);
 
 	Vec3 skinOffset = m_pModelSkin->m_arrModelMeshes[nRenderLOD].m_vRenderMeshOffset;
-	pD->m_pSkinningData->vecPrecisionOffset[0] = skinOffset.x;
-	pD->m_pSkinningData->vecPrecisionOffset[1] = skinOffset.y;
-	pD->m_pSkinningData->vecPrecisionOffset[2] = skinOffset.z;
+	pD->m_pSkinningData->vecAdditionalOffset = skinOffset;
 
 	IRenderMesh* pRenderMesh = m_pModelSkin->GetIRenderMesh(nRenderLOD);
 
@@ -618,12 +637,12 @@ void CAttachmentSKIN::DrawAttachment(SRendParams& RendParams, const SRenderingPa
 			pObj->m_pCurrMaterial = m_pModelSkin->GetIMaterial(0);
 
 		pD->m_pSkinningData->nHWSkinningFlags |= eHWS_DC_deformation_Skinning;
-		if (m_AttFlags & FLAGS_ATTACH_COMPUTE_SKINNING_PREMORPHS)
+		if (bAllowGPUComputePreMorphs)
 			pD->m_pSkinningData->nHWSkinningFlags |= eHWS_DC_Deformation_PreMorphs;
-		if (m_AttFlags & FLAGS_ATTACH_COMPUTE_SKINNING_TANGENTS)
+		if (bAllowGPUComputeTagent)
 			pD->m_pSkinningData->nHWSkinningFlags |= eHWS_DC_Deformation_Tangents;
 	
-		g_pIRenderer->EF_EnqueueComputeSkinningData(pD->m_pSkinningData);
+		g_pIRenderer->EF_EnqueueComputeSkinningData(passInfo.GetIRenderView(), pD->m_pSkinningData);
 
 		pRenderMesh->Render(pObj,passInfo);
 		return;
@@ -634,7 +653,7 @@ void CAttachmentSKIN::DrawAttachment(SRendParams& RendParams, const SRenderingPa
 
 	if(bUseCPUDeformation && pRenderMesh) 
 	{
-	SVertexAnimationJob *pVertexAnimation = static_cast<SVertexAnimationJob*>(pD->m_pSkinningData->pCustomData);
+		SVertexAnimationJob *pVertexAnimation = static_cast<SVertexAnimationJob*>(pD->m_pSkinningData->pCustomData);
 		uint iCurrentRenderMeshID = m_vertexAnimation.m_RenderMeshId & 1;
 
 		if (bNewFrame)
@@ -650,7 +669,10 @@ void CAttachmentSKIN::DrawAttachment(SRendParams& RendParams, const SRenderingPa
 			CModelMesh* pModelMesh = m_pModelSkin->GetModelMesh(nRenderLOD);
 			CSoftwareMesh& geometry = pModelMesh->m_softwareMesh;
 
-			SVertexSkinData vertexSkinData;
+			CRY_ASSERT(pRenderMesh->GetVerticesCount() == geometry.GetVertexCount());
+			CRY_ASSERT(pRenderMesh->GetIndicesCount() == geometry.GetIndexCount());
+
+			SVertexSkinData vertexSkinData = SVertexSkinData();
 			vertexSkinData.pTransformations = pD->m_pSkinningData->pBoneQuatsS;
 			vertexSkinData.pTransformationRemapTable = pD->m_pSkinningData->pRemapTable;
 			vertexSkinData.transformationCount = pD->m_pSkinningData->nNumBones;
@@ -668,7 +690,7 @@ void CAttachmentSKIN::DrawAttachment(SRendParams& RendParams, const SRenderingPa
 			vertexSkinData.pTangentUpdateVertIds = geometry.GetTangentUpdateVertIds();
 			vertexSkinData.tangetUpdateVertIdsCount = geometry.GetTangentUpdateTriIdsCount();
 			vertexSkinData.vertexCount = geometry.GetVertexCount();
-			CRY_ASSERT(pRenderMesh->GetVerticesCount() == geometry.GetVertexCount());
+			m_vertexAnimation.SetSkinData(vertexSkinData);
 
 #if CRY_PLATFORM_DURANGO
 			const uint fslCreate = FSL_VIDEO_CREATE;
@@ -678,33 +700,11 @@ void CAttachmentSKIN::DrawAttachment(SRendParams& RendParams, const SRenderingPa
 			const uint fslRead = FSL_READ;
 #endif
 
-			vertexSkinData.pVertexPositionsPrevious = strided_pointer<const Vec3>(NULL);
-			if (pD->m_pSkinningData->pPreviousSkinningRenderData)
-				gEnv->pJobManager->WaitForJob(*pD->m_pSkinningData->pPreviousSkinningRenderData->pAsyncJobs);
-			_smart_ptr<IRenderMesh>& pRenderMeshPrevious = m_pRenderMeshsSW[1 - iCurrentRenderMeshID];
-			if (pRenderMeshPrevious != NULL)
-			{
-				pRenderMeshPrevious->LockForThreadAccess();
-				Vec3* pPrevPositions = (Vec3*)pRenderMeshPrevious->GetPosPtrNoCache(vertexSkinData.pVertexPositionsPrevious.iStride, fslRead);
-				if (pPrevPositions)
-				{
-					vertexSkinData.pVertexPositionsPrevious.data = pPrevPositions;
-					pVertexAnimation->m_previousRenderMesh = pRenderMeshPrevious; 
-				}
-				else
-				{
-					pRenderMeshPrevious->UnlockStream(VSF_GENERAL);
-					pRenderMeshPrevious->UnLockForThreadAccess();
-				}
-			}
-			m_vertexAnimation.SetSkinData(vertexSkinData);
-
-			pVertexAnimation->vertexData.m_vertexCount = pRenderMesh->GetVerticesCount(); 
+			pVertexAnimation->m_pRenderMesh = pRenderMesh;
 
 			pRenderMesh->LockForThreadAccess();
 
 			SVF_P3F_C4B_T2F *pGeneral = (SVF_P3F_C4B_T2F*)pRenderMesh->GetPosPtrNoCache(pVertexAnimation->vertexData.pPositions.iStride, fslCreate);
-
 			pVertexAnimation->vertexData.pPositions.data    = (Vec3*)(&pGeneral[0].xyz);
 			pVertexAnimation->vertexData.pPositions.iStride = sizeof(pGeneral[0]);
 			pVertexAnimation->vertexData.pColors.data       = (uint32*)(&pGeneral[0].color);
@@ -714,18 +714,17 @@ void CAttachmentSKIN::DrawAttachment(SRendParams& RendParams, const SRenderingPa
 			pVertexAnimation->vertexData.pVelocities.data = (Vec3*)pRenderMesh->GetVelocityPtr(pVertexAnimation->vertexData.pVelocities.iStride, fslCreate);
 			pVertexAnimation->vertexData.pTangents.data = (SPipTangents*)pRenderMesh->GetTangentPtr(pVertexAnimation->vertexData.pTangents.iStride, fslCreate);
 			pVertexAnimation->vertexData.pIndices = pRenderMesh->GetIndexPtr(fslCreate);
-			pVertexAnimation->vertexData.m_indexCount = geometry.GetIndexCount();
+			pVertexAnimation->vertexData.m_vertexCount = pRenderMesh->GetVerticesCount();
+			pVertexAnimation->vertexData.m_indexCount = pRenderMesh->GetIndicesCount();
 
 			if (!pVertexAnimation->vertexData.pPositions ||
 				!pVertexAnimation->vertexData.pVelocities ||
 				!pVertexAnimation->vertexData.pTangents)
 			{
-				pRenderMesh->UnlockStream(VSF_GENERAL); 
+				pRenderMesh->UnlockStream(VSF_GENERAL);
 				pRenderMesh->UnlockStream(VSF_TANGENTS);
 				pRenderMesh->UnlockStream(VSF_VERTEX_VELOCITY);
-#if ENABLE_NORMALSTREAM_SUPPORT
-				pRenderMesh->UnlockStream(VSF_NORMALS);
-#endif
+				pRenderMesh->UnlockIndexStream();
 				pRenderMesh->UnLockForThreadAccess();
 				return; 
 			}
@@ -748,6 +747,28 @@ void CAttachmentSKIN::DrawAttachment(SRendParams& RendParams, const SRenderingPa
 #endif
 			}
 
+			pVertexAnimation->vertexData.pPreviousPositions = strided_pointer<const Vec3>(nullptr);
+			if (pD->m_pSkinningData->pPreviousSkinningRenderData)
+			{
+				gEnv->pJobManager->WaitForJob(*pD->m_pSkinningData->pPreviousSkinningRenderData->pAsyncJobs);
+			}
+			if (IRenderMesh* pRenderMeshPrevious = m_pRenderMeshsSW[1 - iCurrentRenderMeshID])
+			{
+				pRenderMeshPrevious->LockForThreadAccess();
+
+				const Vec3* pPrevPositions = reinterpret_cast<const Vec3*>(pRenderMeshPrevious->GetPosPtrNoCache(pVertexAnimation->vertexData.pPreviousPositions.iStride, fslRead));
+				if (pPrevPositions)
+				{
+					pVertexAnimation->vertexData.pPreviousPositions.data = pPrevPositions;
+					pVertexAnimation->m_pPreviousRenderMesh = pRenderMeshPrevious;
+				}
+				else
+				{
+					pRenderMeshPrevious->UnlockStream(VSF_GENERAL);
+					pRenderMeshPrevious->UnLockForThreadAccess();
+				}
+			}
+
 			pVertexAnimation->pRenderMeshSyncVariable = pRenderMesh->SetAsyncUpdateState();
 
 			SSkinningData *pCurrentJobSkinningData = *pD->m_pSkinningData->pMasterSkinningDataList;
@@ -768,12 +789,10 @@ void CAttachmentSKIN::DrawAttachment(SRendParams& RendParams, const SRenderingPa
 				}
 			}
 
-#ifdef EDITOR_PCDEBUGCODE
-			if (Console::GetInst().ca_DebugSWSkinning)
-				DrawVertexDebug(pRenderMesh, QuatT(RenderMat34), pVertexAnimation, vertexSkinData);
-#endif
-
-			pRenderMesh->UnLockForThreadAccess();
+			if ((Console::GetInst().ca_DebugSWSkinning > 0) || (pMaster->m_CharEditMode & CA_CharacterAuxEditor))
+			{
+				m_vertexAnimation.DrawVertexDebug(pRenderMesh, QuatT(RenderMat34), pVertexAnimation);
+			}
 		}
 	}
 
@@ -787,27 +806,26 @@ void CAttachmentSKIN::DrawAttachment(SRendParams& RendParams, const SRenderingPa
 		CModelMesh* pModelMesh = m_pModelSkin->GetModelMesh(nRenderLOD);
 		static ICVar *p_e_debug_draw = gEnv->pConsole->GetCVar("e_DebugDraw");
 		if(p_e_debug_draw && p_e_debug_draw->GetIVal() > 0)
-			pModelMesh->DrawDebugInfo(pMaster->m_pDefaultSkeleton, nRenderLOD, RenderMat34, p_e_debug_draw->GetIVal(), pMaterial, pObj, RendParams, passInfo.IsGeneralPass(), (IRenderNode*)RendParams.pRenderNode, m_pAttachmentManager->m_pSkelInstance->m_SkeletonPose.GetAABB() );
+			pModelMesh->DrawDebugInfo(pMaster->m_pDefaultSkeleton, nRenderLOD, RenderMat34, p_e_debug_draw->GetIVal(), pMaterial, pObj, RendParams, passInfo.IsGeneralPass(), (IRenderNode*)RendParams.pRenderNode, m_pAttachmentManager->m_pSkelInstance->m_SkeletonPose.GetAABB(),passInfo );
 #endif
 		pRenderMesh->Render(pObj, passInfo);
 
-		//------------------------------------------------------------------
-		//---       render debug-output (only PC in CharEdit mode)       ---
-		//------------------------------------------------------------------
 #if EDITOR_PCDEBUGCODE
-		if (pMaster->m_CharEditMode&CA_CharacterTool) 
+		// Draw debug for vertex/compute skinning shaders.
+		// CPU skinning is handled natively by CVertexAnimation::DrawVertexDebug().
+		if (!bUseCPUDeformation && (pMaster->m_CharEditMode & CA_CharacterAuxEditor))
 		{
 			const Console& rConsole = Console::GetInst();
 
-			uint32 tang = rConsole.ca_DrawTangents;
-			uint32 bitang = rConsole.ca_DrawBinormals;
-			uint32 norm = rConsole.ca_DrawNormals;
-			uint32 wire = rConsole.ca_DrawWireframe; 
+			const bool tang = (rConsole.ca_DrawTangents != 0);
+			const bool bitang = (rConsole.ca_DrawBinormals != 0);
+			const bool norm = (rConsole.ca_DrawNormals != 0);
+			const bool wire = (rConsole.ca_DrawWireframe != 0);
 			if (tang || bitang || norm || wire) 
 			{
 				CModelMesh* pModelMesh = m_pModelSkin->GetModelMesh(nRenderLOD);
-				gEnv->pJobManager->WaitForJob( *pD->m_pSkinningData->pAsyncJobs );
-				SoftwareSkinningDQ_VS_Emulator(pModelMesh, pObj->m_II.m_Matrix,   tang,bitang,norm,wire, pD->m_pSkinningData->pBoneQuatsS);
+				gEnv->pJobManager->WaitForJob(*pD->m_pSkinningData->pAsyncJobs);
+				SoftwareSkinningDQ_VS_Emulator(pModelMesh, pObj->GetMatrix(), tang, bitang, norm, wire, pD->m_pSkinningData->pBoneQuatsS);
 			}
 		}
 #endif
@@ -837,7 +855,7 @@ void CAttachmentSKIN::TriggerMeshStreaming(uint32 nDesiredRenderLOD, const SRend
 	m_pModelSkin->m_arrModelMeshes[nDesiredRenderLOD].m_stream.nFrameId = passInfo.GetMainFrameID();
 }
 
-SSkinningData* CAttachmentSKIN::GetVertexTransformationData(bool bVertexAnimation, uint8 nRenderLOD)
+SSkinningData* CAttachmentSKIN::GetVertexTransformationData(bool useSwSkinningCpu, uint8 nRenderLOD, const SRenderingPassInfo& passInfo)
 {
 	DEFINE_PROFILER_FUNCTION();
 	CCharInstance* pMaster = m_pAttachmentManager->m_pSkelInstance;
@@ -859,14 +877,14 @@ SSkinningData* CAttachmentSKIN::GetVertexTransformationData(bool bVertexAnimatio
 
 	if(pMaster->arrSkinningRendererData[nList].nFrameID != nFrameID )
 	{
-		pMaster->GetSkinningData(); // force master to compute skinning data if not available
-		assert(pMaster->arrSkinningRendererData[nList].nFrameID == nFrameID);
-		assert(pMaster->arrSkinningRendererData[nList].pSkinningData);
+		pMaster->GetSkinningData(passInfo); // force master to compute skinning data if not available
+		CRY_ASSERT(pMaster->arrSkinningRendererData[nList].nFrameID == nFrameID);
+		CRY_ASSERT(pMaster->arrSkinningRendererData[nList].pSkinningData);
 	}
 
 	uint32 nCustomDataSize = 0;
 	uint commandBufferLength = 0;
-	if (bVertexAnimation)
+	if (useSwSkinningCpu)
 	{
 		// Make sure the software skinning command gets compiled.
 		SVertexSkinData vertexSkinData = SVertexSkinData();
@@ -887,13 +905,14 @@ SSkinningData* CAttachmentSKIN::GetVertexTransformationData(bool bVertexAnimatio
 	}
 	else
 	{
-		static ICVar* cvar_gd = gEnv->pConsole->GetCVar("r_ComputeSkinning");
+		static ICVar* cvar_gd       = gEnv->pConsole->GetCVar("r_ComputeSkinning");
 		static ICVar* cvar_gdMorphs = gEnv->pConsole->GetCVar("r_ComputeSkinningMorphs");
 
-		bool bUpdateActiveMorphs = (cvar_gd && cvar_gd->GetIVal()) && 
-				(cvar_gdMorphs && cvar_gdMorphs->GetIVal()) &&
-				(m_AttFlags & FLAGS_ATTACH_COMPUTE_SKINNING) &&
-				(m_AttFlags & FLAGS_ATTACH_COMPUTE_SKINNING_PREMORPHS);
+		bool bAllowGPUComputeDeformation = (cvar_gd       && (cvar_gd      ->GetIVal() == 2)) || (m_AttFlags & FLAGS_ATTACH_COMPUTE_SKINNING);
+		bool bAllowGPUComputePreMorphs   = (cvar_gdMorphs && (cvar_gdMorphs->GetIVal() == 2)) || (m_AttFlags & FLAGS_ATTACH_COMPUTE_SKINNING_PREMORPHS);
+		bool bUpdateActiveMorphs = 
+			(cvar_gd       && cvar_gd      ->GetIVal()) && bAllowGPUComputeDeformation &&
+			(cvar_gdMorphs && cvar_gdMorphs->GetIVal()) && bAllowGPUComputePreMorphs;
 
 		if (bUpdateActiveMorphs)
 		{
@@ -928,7 +947,7 @@ SSkinningData* CAttachmentSKIN::GetVertexTransformationData(bool bVertexAnimatio
 	const uint32 skinningQuatCountMax = pMaster->arrSkinningRendererData[nList].pSkinningData->nNumBones;
 	const uint32 nNumBones = std::min(skinningQuatCount, skinningQuatCountMax);
 
-	SSkinningData *pSkinningData = gEnv->pRenderer->EF_CreateRemappedSkinningData(nNumBones, pMaster->arrSkinningRendererData[nList].pSkinningData, nCustomDataSize, pMaster->m_pDefaultSkeleton->GetGuid());	
+	SSkinningData *pSkinningData = gEnv->pRenderer->EF_CreateRemappedSkinningData(passInfo.GetIRenderView(), nNumBones, pMaster->arrSkinningRendererData[nList].pSkinningData, nCustomDataSize, pMaster->m_pDefaultSkeleton->GetGuid());	
 	pSkinningData->pCustomTag = this;
 	pSkinningData->pRenderMesh = m_pModelSkin->GetIRenderMesh(nRenderLOD);
 	if (nCustomDataSize)
@@ -976,8 +995,6 @@ SMeshLodInfo CAttachmentSKIN::ComputeGeometricMean() const
 
 void CAttachmentSKIN::HideAttachment( uint32 x ) 
 {
-	m_pAttachmentManager->OnHideAttachment(this, FLAGS_ATTACH_HIDE_MAIN_PASS | FLAGS_ATTACH_HIDE_SHADOW_PASS | FLAGS_ATTACH_HIDE_RECURSION, x!=0);
-
 	if(x)
 		m_AttFlags |=  (FLAGS_ATTACH_HIDE_MAIN_PASS | FLAGS_ATTACH_HIDE_SHADOW_PASS | FLAGS_ATTACH_HIDE_RECURSION);
 	else
@@ -986,8 +1003,6 @@ void CAttachmentSKIN::HideAttachment( uint32 x )
 
 void CAttachmentSKIN::HideInRecursion( uint32 x ) 
 {
-	m_pAttachmentManager->OnHideAttachment(this, FLAGS_ATTACH_HIDE_RECURSION, x!=0);
-
 	if(x)
 		m_AttFlags |= FLAGS_ATTACH_HIDE_RECURSION;
 	else
@@ -996,8 +1011,6 @@ void CAttachmentSKIN::HideInRecursion( uint32 x )
 
 void CAttachmentSKIN::HideInShadow( uint32 x ) 
 {
-	m_pAttachmentManager->OnHideAttachment(this, FLAGS_ATTACH_HIDE_SHADOW_PASS, x!=0);
-
 	if(x)
 		m_AttFlags |= FLAGS_ATTACH_HIDE_SHADOW_PASS;
 	else
@@ -1006,152 +1019,6 @@ void CAttachmentSKIN::HideInShadow( uint32 x )
 
 #ifdef EDITOR_PCDEBUGCODE
 //These functions are need only for the Editor on PC
-
-void CAttachmentSKIN::DrawVertexDebug(	IRenderMesh* pRenderMesh, const QuatT& location,	const SVertexAnimationJob* pVertexAnimation,	const SVertexSkinData& vertexSkinData)
-{
-	static const ColorB SKINNING_COLORS[8] =
-	{
-		ColorB(0x40, 0x40, 0xff, 0xff),
-		ColorB(0x40, 0x80, 0xff, 0xff),
-		ColorB(0x40, 0xff, 0x40, 0xff),
-		ColorB(0x80, 0xff, 0x40, 0xff),
-
-		ColorB(0xff, 0x80, 0x40, 0xff),
-		ColorB(0xff, 0x80, 0x80, 0xff),
-		ColorB(0xff, 0xc0, 0xc0, 0xff),
-		ColorB(0xff, 0xff, 0xff, 0xff),
-	};
-
-	// wait till the SW-Skinning jobs have finished
-	while(*pVertexAnimation->pRenderMeshSyncVariable)				
-		CrySleep(1);				
-
-	IRenderMesh* pIRenderMesh = pRenderMesh;
-	strided_pointer<Vec3> parrDstPositions = pVertexAnimation->vertexData.pPositions;
-	strided_pointer<SPipTangents> parrDstTangents;
-	parrDstTangents.data = (SPipTangents*)pVertexAnimation->vertexData.pTangents.data; 
-	parrDstTangents.iStride = sizeof(SPipTangents);
-
-	uint32 numExtVertices = pIRenderMesh->GetVerticesCount();
-	if (parrDstPositions && parrDstTangents)
-	{
-		static DynArray<Vec3>		arrDstPositions;
-		static DynArray<ColorB>	arrDstColors;
-		uint32 numDstPositions=arrDstPositions.size();
-		if (numDstPositions<numExtVertices)
-		{
-			arrDstPositions.resize(numExtVertices);
-			arrDstColors.resize(numExtVertices);
-		}
-
-		//transform vertices by world-matrix
-		for (uint32 i=0; i<numExtVertices; ++i)
-			arrDstPositions[i]	= location*parrDstPositions[i];
-
-		//render faces as wireframe
-		if (Console::GetInst().ca_DebugSWSkinning == 1)
-		{
-			for (uint i=0; i<CRY_ARRAY_COUNT(SKINNING_COLORS); ++i)
-				g_pAuxGeom->Draw2dLabel(32.0f+float(i*16), 32.0f, 2.0f, ColorF(SKINNING_COLORS[i].r/255.0f, SKINNING_COLORS[i].g/255.0f, SKINNING_COLORS[i].b/255.0f, 1.0f), false, "%d", i+1);
-
-			for (uint32 e=0; e<numExtVertices; e++)
-			{
-				uint32 w=0;
-				const SoftwareVertexBlendWeight* pBlendWeights = &vertexSkinData.pVertexTransformWeights[e];
-				for (uint c=0; c<vertexSkinData.vertexTransformCount; ++c)
-				{
-					if (pBlendWeights[c] > 0.0f)
-						w++;
-				}
-
-				if (w) --w;
-				arrDstColors[e] = w < 8 ? SKINNING_COLORS[w] : ColorB(0x00, 0x00, 0x00, 0xff);
-			}
-
-			pIRenderMesh->LockForThreadAccess();
-			uint32	numIndices = pIRenderMesh->GetIndicesCount();
-			vtx_idx* pIndices = pIRenderMesh->GetIndexPtr(FSL_READ);
-
-			IRenderAuxGeom*	pAuxGeom =	gEnv->pRenderer->GetIRenderAuxGeom();
-			SAuxGeomRenderFlags renderFlags( e_Def3DPublicRenderflags );
-			renderFlags.SetFillMode( e_FillModeWireframe );
-			//		renderFlags.SetAlphaBlendMode(e_AlphaAdditive);
-			renderFlags.SetDrawInFrontMode( e_DrawInFrontOn );
-			pAuxGeom->SetRenderFlags( renderFlags );
-			//	pAuxGeom->DrawTriangles(&arrDstPositions[0],numExtVertices, pIndices,numIndices,RGBA8(0x00,0x17,0x00,0x00));		
-			pAuxGeom->DrawTriangles(&arrDstPositions[0],numExtVertices, pIndices,numIndices,&arrDstColors[0]);		
-
-			pIRenderMesh->UnLockForThreadAccess();
-		}	
-
-		//render the Normals
-		if (Console::GetInst().ca_DebugSWSkinning == 2)
-		{
-			IRenderAuxGeom*	pAuxGeom =	gEnv->pRenderer->GetIRenderAuxGeom();
-			static std::vector<ColorB> arrExtVColors;
-			uint32 csize = arrExtVColors.size();
-			if (csize<(numExtVertices*2)) arrExtVColors.resize( numExtVertices*2 );	
-			for(uint32 i=0; i<numExtVertices*2; i=i+2)	
-			{
-				arrExtVColors[i+0] = RGBA8(0x00,0x00,0x3f,0x1f);
-				arrExtVColors[i+1] = RGBA8(0x7f,0x7f,0xff,0xff);
-			}
-
-			Matrix33 WMat33 = Matrix33(location.q);
-			static std::vector<Vec3> arrExtSkinnedStream;
-			uint32 numExtSkinnedStream = arrExtSkinnedStream.size();
-			if (numExtSkinnedStream<(numExtVertices*2)) arrExtSkinnedStream.resize( numExtVertices*2 );	
-			for(uint32 i=0,t=0; i<numExtVertices; i++)	
-			{
-				Vec3 vNormal = parrDstTangents[i].GetN().GetNormalized() * 0.03f;
-
-				arrExtSkinnedStream[t+0] = arrDstPositions[i]; 
-				arrExtSkinnedStream[t+1] = WMat33*vNormal + arrExtSkinnedStream[t];
-				t=t+2;
-			}
-			SAuxGeomRenderFlags renderFlags( e_Def3DPublicRenderflags );
-			pAuxGeom->SetRenderFlags( renderFlags );
-			pAuxGeom->DrawLines( &arrExtSkinnedStream[0],numExtVertices*2, &arrExtVColors[0]);		
-		}
-	}
-
-	if (Console::GetInst().ca_DebugSWSkinning == 3)
-	{
-		if (!vertexSkinData.tangetUpdateVertIdsCount)
-			return;
-
-		uint numVertices = pRenderMesh->GetVerticesCount();
-		uint numIndices = vertexSkinData.tangetUpdateTriCount*3;
-
-		static DynArray<vtx_idx> indices;
-		static DynArray<Vec3> positions;
-		static DynArray<ColorB>	colors;
-
-		indices.resize(numIndices);
-		for (uint i=0; i<vertexSkinData.tangetUpdateTriCount; ++i)
-		{
-			const uint base = i * 3;
-			indices[base+0] = vertexSkinData.pTangentUpdateTriangles[i].idx1;
-			indices[base+1] = vertexSkinData.pTangentUpdateTriangles[i].idx2;
-			indices[base+2] = vertexSkinData.pTangentUpdateTriangles[i].idx3;
-		}
-
-		positions.resize(numVertices);
-		colors.resize(numVertices);
-		for (uint i=0; i<numVertices; ++i)
-		{
-			positions[i] = location * pVertexAnimation->vertexData.pPositions[i];
-			colors[i] = ColorB(0x00, 0x00, 0xff, 0xff);
-		}
-
-		IRenderAuxGeom*	pAuxGeom = gEnv->pRenderer->GetIRenderAuxGeom();
-		SAuxGeomRenderFlags renderFlags( e_Def3DPublicRenderflags );
-		renderFlags.SetFillMode( e_FillModeWireframe );
-		renderFlags.SetDrawInFrontMode( e_DrawInFrontOn );
-		pAuxGeom->SetRenderFlags( renderFlags );
-		pAuxGeom->DrawTriangles(&positions[0], numVertices, &indices[0], numIndices, &colors[0]);
-	}
-}
 
 void CAttachmentSKIN::DrawWireframeStatic( const Matrix34& m34, int nLOD, uint32 color) 
 {
@@ -1165,6 +1032,9 @@ void CAttachmentSKIN::DrawWireframeStatic( const Matrix34& m34, int nLOD, uint32
 //////////////////////////////////////////////////////////////////////////
 void CAttachmentSKIN::SoftwareSkinningDQ_VS_Emulator( CModelMesh* pModelMesh, Matrix34 rRenderMat34, uint8 tang,uint8 binorm,uint8 norm,uint8 wire, const DualQuat* const pSkinningTransformations)
 {
+	// TODO: This method produces inaccurate results and should be replaced by a functionally equivalent
+	// debug visualization performed with geometry that has been deformed by the actual shader implementation.
+
 #ifdef DEFINE_PROFILER_FUNCTION
 	DEFINE_PROFILER_FUNCTION();
 #endif
@@ -1180,7 +1050,7 @@ void CAttachmentSKIN::SoftwareSkinningDQ_VS_Emulator( CModelMesh* pModelMesh, Ma
 
 	uint32 numExtIndices	= pModelMesh->m_pIRenderMesh->GetIndicesCount();
 	uint32 numExtVertices	= pModelMesh->m_pIRenderMesh->GetVerticesCount();
-	assert(numExtVertices && numExtIndices);
+	CRY_ASSERT(numExtVertices && numExtIndices);
 
 	uint32 ssize=g_arrExtSkinnedStream.size();
 	if (ssize<numExtVertices)
@@ -1245,20 +1115,28 @@ void CAttachmentSKIN::SoftwareSkinningDQ_VS_Emulator( CModelMesh* pModelMesh, Ma
 			//---------------------------------------------------------------------
 			//get indices for bones (always 4 indices per vertex)
 			uint32 id0 = hwIndices[0];
-			assert(id0 < m_arrRemapTable.size());
+			CRY_ASSERT(id0 < m_arrRemapTable.size());
 			uint32 id1 = hwIndices[1];
-			assert(id1 < m_arrRemapTable.size());
+			CRY_ASSERT(id1 < m_arrRemapTable.size());
 			uint32 id2 = hwIndices[2];
-			assert(id2 < m_arrRemapTable.size());
+			CRY_ASSERT(id2 < m_arrRemapTable.size());
 			uint32 id3 = hwIndices[3];
-			assert(id3 < m_arrRemapTable.size());
+			CRY_ASSERT(id3 < m_arrRemapTable.size());
 
 			//get weights for vertices (always 4 weights per vertex)
 			f32 w0 = hwWeights[0]/255.0f;
 			f32 w1 = hwWeights[1]/255.0f;
 			f32 w2 = hwWeights[2]/255.0f;
 			f32 w3 = hwWeights[3]/255.0f;
-			assert(fabsf((w0+w1+w2+w3)-1.0f)<0.0001f);
+
+			// Current skinning shader implementations support more than 4 weights per vertex.
+			// This function produces inaccurate results already due to implementations having drifted
+			// apart, so for the time being we ignore any extra weights and simply normalize the first 4.
+			const f32 weightSum = w0 + w1 + w2 + w3;
+			w0 = w0 / weightSum;
+			w1 = w1 / weightSum;
+			w2 = w2 / weightSum;
+			w3 = w3 / weightSum;
 
 			const DualQuat& q0=arrRemapSkinQuat[id0];
 			const DualQuat& q1=arrRemapSkinQuat[id1];
@@ -1272,7 +1150,7 @@ void CAttachmentSKIN::SoftwareSkinningDQ_VS_Emulator( CModelMesh* pModelMesh, Ma
 			g_arrExtSkinnedStream[e] = rRenderMat34*(wquat*hwPosition);  //transform position by dual-quaternion
 
 			Quat QTangent = hwQTangent.GetQ();
-			assert( QTangent.IsUnit() );
+			CRY_ASSERT( QTangent.IsUnit() );
 
 			g_arrQTangents[e] = wquat.nq*QTangent;
 			if (g_arrQTangents[e].w<0.0f)

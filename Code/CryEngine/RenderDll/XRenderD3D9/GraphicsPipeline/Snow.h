@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -10,16 +10,42 @@
 class CSnowStage : public CGraphicsPipelineStage
 {
 public:
-	CSnowStage();
+	static const EGraphicsPipelineStage StageID = eStage_Snow;
+
+	CSnowStage(CGraphicsPipeline& graphicsPipeline)
+		: CGraphicsPipelineStage(graphicsPipeline)
+		, m_passCopyGBufferNormal(&graphicsPipeline)
+		, m_passCopyGBufferSpecular(&graphicsPipeline)
+		, m_passCopyGBufferDiffuse(&graphicsPipeline)
+		, m_passDeferredSnowGBuffer(&graphicsPipeline)
+		, m_passParallaxSnowHeightMapGen(&graphicsPipeline)
+		, m_passParallaxSnowMin(&graphicsPipeline)
+		, m_passCopySceneToParallaxSnowSrc(&graphicsPipeline)
+		, m_passCopySceneTargetTexture(&graphicsPipeline)
+		, m_passSnowHalfResCompisite(&graphicsPipeline)
+	{
+		for (auto& pass : m_passParallaxSnow)
+			pass.SetGraphicsPipeline(&graphicsPipeline);
+	}
 	virtual ~CSnowStage();
 
-	virtual void Init() override;
-	virtual void Prepare(CRenderView* pRenderView) override;
+	bool IsStageActive(EShaderRenderingFlags flags) const final
+	{
+		return CRendererCVars::IsSnowEnabled() && CRenderer::CV_r_PostProcess;
+	}
 
-	void         ExecuteSnowPreprocess();
-	void         ExecuteDeferredSnowGBuffer();
-	void         ExecuteDeferredSnowDisplacement();
-	void         Execute();
+	void Init() final;
+	void Destroy();
+	void Update() final;
+	void Resize(int renderWidth, int renderHeight) final;
+	void OnCVarsChanged(const CCVarUpdateRecorder& cvarUpdater) final;
+
+	void ExecuteDeferredSnowGBuffer();
+	void ExecuteDeferredSnowDisplacement();
+	void Execute();
+
+	bool IsDeferredSnowEnabled() const             { return CRendererCVars::IsSnowEnabled() && gcpRendD3D->m_bDeferredSnowEnabled; }
+	bool IsDeferredSnowDisplacementEnabled() const { return CRendererCVars::IsSnowEnabled() && CRendererCVars::CV_r_snow_displacement && gcpRendD3D->m_bDeferredSnowEnabled; }
 
 private:
 	// Snow particle properties
@@ -56,14 +82,25 @@ private:
 	};
 
 private:
+	void ResizeResource(int renderWidth, int renderHeight);
+
 	bool GenerateSnowClusterVertex();
 	void CreateSnowClusters();
 	void UpdateSnowClusters();
 	void RenderSnowClusters();
 	void ExecuteHalfResComposite();
-	void GetScissorRegion(const CRenderCamera& rc, const Vec3& vCenter, float fRadius, int32& sX, int32& sY, int32& sWidth, int32& sHeight) const;
+	void GetScissorRegion(const Vec3& cameraOrigin, const Vec3& vCenter, float fRadius, int32& sX, int32& sY, int32& sWidth, int32& sHeight) const;
+
+	bool Initialized() const { return m_pSnowFlakesTex.get() != nullptr; }
 
 private:
+	_smart_ptr<CTexture>      m_pSnowFlakesTex;
+	_smart_ptr<CTexture>      m_pSnowDerivativesTex;
+	_smart_ptr<CTexture>      m_pSnowSpatterTex;
+	_smart_ptr<CTexture>      m_pFrostBubblesBumpTex;
+	_smart_ptr<CTexture>      m_pSnowFrostBumpTex;
+	_smart_ptr<CTexture>      m_pSnowDisplacementTex;
+
 	CStretchRectPass          m_passCopyGBufferNormal;
 	CStretchRectPass          m_passCopyGBufferSpecular;
 	CStretchRectPass          m_passCopyGBufferDiffuse;
@@ -83,17 +120,8 @@ private:
 
 	buffer_handle_t           m_snowFlakeVertexBuffer = ~0u;
 
-	CTexture*                 m_pSnowFlakesTex = nullptr;
-	CTexture*                 m_pSnowDerivativesTex = nullptr;
-	CTexture*                 m_pSnowSpatterTex = nullptr;
-	CTexture*                 m_pFrostBubblesBumpTex = nullptr;
-	CTexture*                 m_pSnowFrostBumpTex = nullptr;
-	CTexture*                 m_pVolumeNoiseTex = nullptr;
-	CTexture*                 m_pSnowDisplacementTex = nullptr;
-
 	int32                     m_nSnowFlakeVertCount = 0;
 	int32                     m_nAliveClusters = 0;
 	int32                     m_nNumClusters = 0;
 	int32                     m_nFlakesPerCluster = 0;
-
 };

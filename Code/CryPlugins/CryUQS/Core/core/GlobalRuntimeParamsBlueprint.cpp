@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "GlobalRuntimeParamsBlueprint.h"
@@ -21,9 +21,9 @@ namespace UQS
 			// nothing
 		}
 
-		void CTextualGlobalRuntimeParamsBlueprint::AddParameter(const char* szName, const char* szType, bool bAddToDebugRenderWorld, DataSource::SyntaxErrorCollectorUniquePtr pSyntaxErrorCollector)
+		void CTextualGlobalRuntimeParamsBlueprint::AddParameter(const char* szName, const char* szTypeName, const CryGUID& typeGUID, bool bAddToDebugRenderWorld, DataSource::SyntaxErrorCollectorUniquePtr pSyntaxErrorCollector)
 		{
-			m_parameters.emplace_back(szName, szType, bAddToDebugRenderWorld, std::move(pSyntaxErrorCollector));
+			m_parameters.emplace_back(szName, szTypeName, typeGUID, bAddToDebugRenderWorld, std::move(pSyntaxErrorCollector));
 		}
 
 		size_t CTextualGlobalRuntimeParamsBlueprint::GetParameterCount() const
@@ -33,9 +33,9 @@ namespace UQS
 
 		ITextualGlobalRuntimeParamsBlueprint::SParameterInfo CTextualGlobalRuntimeParamsBlueprint::GetParameter(size_t index) const
 		{
-			assert(index < m_parameters.size());
+			CRY_ASSERT(index < m_parameters.size());
 			const SStoredParameterInfo& pi = m_parameters[index];
-			return SParameterInfo(pi.name.c_str(), pi.type.c_str(), pi.bAddToDebugRenderWorld, pi.pSyntaxErrorCollector.get());
+			return SParameterInfo(pi.name.c_str(), pi.typeName.c_str(), pi.typeGUID, pi.bAddToDebugRenderWorld, pi.pSyntaxErrorCollector.get());
 		}
 
 		//===================================================================================
@@ -51,8 +51,6 @@ namespace UQS
 
 		bool CGlobalRuntimeParamsBlueprint::Resolve(const ITextualGlobalRuntimeParamsBlueprint& source, const CQueryBlueprint* pParentQueryBlueprint)
 		{
-			bool bResolveSucceeded = true;
-
 			//
 			// - parse the runtime-params from given source
 			// - we do this before inheriting from given parent because we wanna detect duplicates in the source, and not mistake an inherited from the parent for being a duplicate
@@ -71,20 +69,23 @@ namespace UQS
 					{
 						pSE->AddErrorMessage("Duplicate parameter: '%s'", p.szName);
 					}
-					bResolveSucceeded = false;
-					continue;
+					return false;
 				}
 
-				// find the item factory
-				Client::IItemFactory* pItemFactory = g_pHub->GetItemFactoryDatabase().FindFactoryByName(p.szType);
-				if (!pItemFactory)
+				// find the item factory: first by GUID, then by name
+				Client::IItemFactory* pItemFactory;
+				if (!(pItemFactory = g_pHub->GetItemFactoryDatabase().FindFactoryByGUID(p.typeGUID)))
 				{
-					if (DataSource::ISyntaxErrorCollector* pSE = p.pSyntaxErrorCollector)
+					if (!(pItemFactory = g_pHub->GetItemFactoryDatabase().FindFactoryByName(p.szTypeName)))
 					{
-						pSE->AddErrorMessage("Unknown item type: '%s'", p.szType);
+						if (DataSource::ISyntaxErrorCollector* pSE = p.pSyntaxErrorCollector)
+						{
+							Shared::CUqsString typeGuidAsString;
+							Shared::Internal::CGUIDHelper::ToString(p.typeGUID, typeGuidAsString);
+							pSE->AddErrorMessage("Unknown item type: GUID = %s, name = '%s'", typeGuidAsString.c_str(), p.szTypeName);
+						}
+						return false;
 					}
-					bResolveSucceeded = false;
-					continue;
 				}
 
 				// - if the same parameter exists already in a parent query, ensure that both have the same data type (name clashes are fine, but type clashes are not!)
@@ -117,8 +118,7 @@ namespace UQS
 							{
 								pSE->AddErrorMessage("Type mismatch: expected '%s' (since the parent's parameter is of that type), but got a '%s'", pParentItemFactory->GetItemType().name(), pItemFactory->GetItemType().name());
 							}
-							bResolveSucceeded = false;
-							continue;
+							return false;
 						}
 					}
 				}
@@ -126,7 +126,7 @@ namespace UQS
 				m_runtimeParameters.insert(std::map<string, SParamInfo>::value_type(p.szName, SParamInfo(pItemFactory, p.bAddToDebugRenderWorld)));
 			}
 
-			return bResolveSucceeded;
+			return true;
 		}
 
 		const std::map<string, CGlobalRuntimeParamsBlueprint::SParamInfo>& CGlobalRuntimeParamsBlueprint::GetParams() const

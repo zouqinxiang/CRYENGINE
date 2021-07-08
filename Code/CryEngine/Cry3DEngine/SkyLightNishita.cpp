@@ -1,15 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
-
-/*************************************************************************
-   -------------------------------------------------------------------------
-   $Id$
-   $DateTime$
-
-   -------------------------------------------------------------------------
-   History:
-   - 09:05:2005   11:08 : Created by Carsten Wenzel
-
-*************************************************************************/
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 
@@ -68,7 +57,7 @@ static inline f64 exp_fast(f64 arg)
 	const f64 eco_m(1048576L / 0.693147180559945309417232121458177);
 	const f64 eco_a(1072693248L - 60801L);
 
-#if CRY_PLATFORM_X86 || CRY_PLATFORM_X64 || CRY_PLATFORM_ARM // for little endian (tested on Win32 / Win64)
+#if CRY_PLATFORM_X64 || CRY_PLATFORM_ARM // for little endian (tested on Win32 / Win64)
 	eco e;
 	#ifdef _DEBUG
 	e.d = 1.0;
@@ -234,7 +223,6 @@ void CSkyLightNishita::ComputeInScatteringNoPremul(const f32 outScatteringConstM
 	// to be reused by ray-sphere intersection code in loop below
 	f32 B(2.0f * viewer.Dot(skyDir));
 	f32 Bsq(B * B);
-	f32 Cpart(viewer.Dot(viewer));
 
 	// calculate optical depth at viewer
 	const SOpticalDepthLUTEntry* const __restrict cpOptDepthLUT = &m_opticalDepthLUT[0];
@@ -262,7 +250,7 @@ void CSkyLightNishita::ComputeInScatteringNoPremul(const f32 outScatteringConstM
 		const SOpticalScaleLUTEntry& crOpticalScaleLUTEntry = cpOptScaleLUT[a];
 		SOpticalScaleLUTEntry osAtHeight(crOpticalScaleLUTEntry);
 
-		f32 C(Cpart - (c_earthRadiusf + osAtHeight.atmosphereLayerHeight) * (c_earthRadiusf + osAtHeight.atmosphereLayerHeight));
+		f32 C = -osAtHeight.atmosphereLayerHeight * (osAtHeight.atmosphereLayerHeight + 2.0f * c_earthRadiusf);
 		f32 det(Bsq - 4.0f * C);
 		assert(det >= 0.0f && (0.5f * (-B - sqrtf(det)) <= 0.0f) && (0.5f * (-B + sqrtf(det)) >= 0.0f));
 
@@ -435,7 +423,7 @@ bool CSkyLightNishita::ComputeOpticalDepth(const Vec3d& cameraLookDir, const f64
 
 void CSkyLightNishita::ComputeOpticalLUTs()
 {
-	LOADING_TIME_PROFILE_SECTION(GetISystem());
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 
 	ILog* pLog(C3DEngine::GetLog());
 	if (0 != pLog)

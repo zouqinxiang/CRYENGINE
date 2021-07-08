@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
    -------------------------------------------------------------------------
@@ -54,8 +54,8 @@ void CRemoteCommandServer::WrappedCommand::Release()
 
 CRemoteCommandServer::Endpoint::Endpoint(CRemoteCommandManager* pManager, class CRemoteCommandServer* pServer, IServiceNetworkConnection* pConnection)
 	: m_pConnection(pConnection)
-	, m_pManager(pManager)
 	, m_pServer(pServer)
+	, m_pManager(pManager)
 	, m_lastReceivedCommand(0)
 	, m_lastExecutedCommand(0)
 	, m_lastReceivedCommandACKed(0)
@@ -68,9 +68,8 @@ CRemoteCommandServer::Endpoint::~Endpoint()
 {
 	// release commands that were not yet executed
 	// this will release the command memory buffers (if they are not referenced elsewhere)
-	while (!m_pCommandsToExecute.empty())
+	for (WrappedCommand* pCommand : m_pCommandsToExecute.pop_all())
 	{
-		WrappedCommand* pCommand = m_pCommandsToExecute.pop();
 		pCommand->Release();
 	}
 
@@ -150,11 +149,9 @@ void CRemoteCommandServer::Endpoint::Execute()
 	uint32 idOfLastExecutedCommand = 0;
 
 	// Process the commands on the execution list
-	while (!m_pCommandsToExecute.empty())
+	WrappedCommand* pCommand;
+	while (m_pCommandsToExecute.try_pop(pCommand))
 	{
-		// Pop the command from the stack
-		WrappedCommand* pCommand = m_pCommandsToExecute.pop();
-
 		LOG_VERBOSE(3, "Executing command '%s', ID %d",
 		            pCommand->GetCommand()->GetClass()->GetName(),
 		            pCommand->GetId());
@@ -432,9 +429,6 @@ bool CRemoteCommandServer::Endpoint::Update()
 CRemoteCommandServer::CRemoteCommandServer(CRemoteCommandManager* pManager, IServiceNetworkListener* pListener)
 	: m_pManager(pManager)
 	, m_pListener(pListener)
-	, m_bCloseThread(false)
-	, m_suppressionCounter(0)
-	, m_bIsSuppressed(false)
 {
 	// Start processing thread (receiving from network, deserialization, etc)
 	if (!gEnv->pThreadManager->SpawnThread(this, "RemoteCommandServer"))
@@ -464,9 +458,9 @@ CRemoteCommandServer::~CRemoteCommandServer()
 	m_pEndpointToDelete.clear();
 
 	// Cleanup the raw messages
-	while (!m_pRawMessages.empty())
+	for (auto pMessage : m_pRawMessages.pop_all())
 	{
-		delete m_pRawMessages.pop();
+		delete pMessage;
 	}
 
 	// Properly close the listening socket
@@ -543,10 +537,9 @@ void CRemoteCommandServer::ProcessRawMessagesSync()
 	}
 
 	// process each message
-	while (!m_pRawMessages.empty())
+	RawMessage* pMsg;
+	while (m_pRawMessages.try_pop(pMsg))
 	{
-		RawMessage* pMsg = m_pRawMessages.pop();
-
 		// Process messages only from alive connection (they could die before we got a chance to process the message)
 		if (pMsg && pMsg->m_pConnection->IsAlive())
 		{
@@ -715,11 +708,10 @@ void CRemoteCommandServer::ThreadEntry()
 				}
 			}
 		}
-
 		// Limit the CPU usage
 		// TODO: consider using some event based mechanism since the only source of
 		// work for this thread is the network we can esily be triggered by that.
-		Sleep(5);
+		CrySleep(5);
 	}
 }
 

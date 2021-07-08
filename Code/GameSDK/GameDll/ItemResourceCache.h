@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /***********************************************************************************
 ------------------------------------------------------------------------------------
@@ -195,7 +195,7 @@ private:
 		void AddUser(const EntityId userId)
 		{
 #if defined(_DEBUG)
-			CRY_ASSERT_MESSAGE(ValidateAddForEntity(userId), "Adding item dba user multiple times!");
+			CRY_ASSERT(ValidateAddForEntity(userId), "Adding item dba user multiple times!");
 #endif	
 			m_userCount++;
 		}
@@ -203,7 +203,7 @@ private:
 		void RemoveUser(const EntityId userId)
 		{
 #if defined(_DEBUG)
-			CRY_ASSERT_MESSAGE(ValidateRemoveForEntity(userId), "Removing item dba user which is not!");
+			CRY_ASSERT(ValidateRemoveForEntity(userId), "Removing item dba user which is not!");
 #endif	
 			m_userCount--;
 

@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "SyntaxErrorCollector_XML.h"
@@ -49,7 +49,7 @@ namespace UQS
 
 		const char* CXMLDataErrorCollector::GetError(size_t index) const
 		{
-			assert(index < m_errorCollection.size());
+			CRY_ASSERT(index < m_errorCollection.size());
 			return m_errorCollection[index].c_str();
 		}
 

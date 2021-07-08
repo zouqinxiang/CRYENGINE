@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 // -------------------------------------------------------------------------
 //  File name:   FlowInventoryNodes.cpp
@@ -135,7 +135,7 @@ public:
 			if (!itemClass.empty())
 			{
 				IGameRules* pGameRules = CCryAction::GetCryAction()->GetIGameRulesSystem()->GetCurrentGameRules();
-				CRY_ASSERT_MESSAGE(pGameRules != NULL, "No game rules active, can not precache resources");
+				CRY_ASSERT(pGameRules != NULL, "No game rules active, can not precache resources");
 				if (pGameRules)
 				{
 					pGameRules->PrecacheLevelResource(itemClass.c_str(), eGameResourceType_Item);

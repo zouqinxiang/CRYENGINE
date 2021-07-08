@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -21,7 +21,7 @@ public:
 	virtual ~CSmartObjectHelperDialog();
 
 	void    SetSOHelper(const CString& sClassName, const CString& sSOHelper) { m_sClassName = sClassName; m_sSOHelper = sSOHelper; }
-	CString GetSOHelper()                                                    { return m_sSOHelper; };
+	CString GetSOHelper()                                                    { return m_sSOHelper; }
 
 	// Dialog Data
 	enum { IDD = IDD_AIANCHORS };

@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "Rain.h"
@@ -71,7 +71,7 @@ bool CRain::ReloadExtension(IGameObject* pGameObject, const SEntitySpawnParams& 
 {
 	ResetGameObject();
 
-	CRY_ASSERT_MESSAGE(false, "CRain::ReloadExtension not implemented");
+	CRY_ASSERT(false, "CRain::ReloadExtension not implemented");
 
 	return false;
 }
@@ -79,7 +79,7 @@ bool CRain::ReloadExtension(IGameObject* pGameObject, const SEntitySpawnParams& 
 //------------------------------------------------------------------------
 bool CRain::GetEntityPoolSignature(TSerialize signature)
 {
-	CRY_ASSERT_MESSAGE(false, "CRain::GetEntityPoolSignature not implemented");
+	CRY_ASSERT(false, "CRain::GetEntityPoolSignature not implemented");
 
 	return true;
 }
@@ -119,7 +119,7 @@ void CRain::Update(SEntityUpdateContext& ctx, int updateSlot)
 	const IActor* pClient = g_pGame->GetIGameFramework()->GetClientActor();
 	if (pClient && Reset())
 	{
-		const Vec3 vCamPos = gEnv->pRenderer->GetCamera().GetPosition();
+		const Vec3 vCamPos = GetISystem()->GetViewCamera().GetPosition();
 		Vec3 vR = (GetEntity()->GetWorldPos() - vCamPos) / max(m_params.fRadius, 1e-3f);
 		float fAttenAmount = max(0.f, 1.0f - vR.dot(vR));
 		fAttenAmount *= m_params.fAmount;
@@ -153,8 +153,13 @@ void CRain::HandleEvent(const SGameObjectEvent& event)
 {
 }
 
+Cry::Entity::EventFlags CRain::GetEventMask() const
+{
+	return ENTITY_EVENT_RESET | ENTITY_EVENT_HIDE | ENTITY_EVENT_DONE;
+}
+
 //------------------------------------------------------------------------
-void CRain::ProcessEvent(SEntityEvent& event)
+void CRain::ProcessEvent(const SEntityEvent& event)
 {
 	switch (event.event)
 	{
@@ -267,8 +272,6 @@ public:
 
 	virtual void ProcessEvent(EFlowEvent event, SActivationInfo* pActInfo)
 	{
-		EFlowEvent eventType = event;
-
 		switch (event)
 		{
 		case eFE_Activate:

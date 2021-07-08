@@ -1,7 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
-
-#ifndef __VehicleMovementPanel_h__
-#define __VehicleMovementPanel_h__
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -44,7 +41,4 @@ protected:
 	CVarBlockPtr             m_pTypeBlock;
 
 	IVariable::OnSetCallback m_onSetCallback;
-
 };
-
-#endif // __VehicleMovementPanel_h__

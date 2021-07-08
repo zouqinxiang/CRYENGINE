@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 // -------------------------------------------------------------------------
 //  File name:   FlashUIActionNodes.cpp
@@ -93,7 +93,7 @@ void CFlashUIStartActionNode::ProcessEvent(EFlowEvent event, SActivationInfo* pA
 		m_stack.init(pActInfo->pGraph);
 		if (m_pAction)
 		{
-			CRY_ASSERT_MESSAGE(gEnv->pFlashUI, "No FlashUI extension available!");
+			CRY_ASSERT(gEnv->pFlashUI, "No FlashUI extension available!");
 			pActInfo->pGraph->SetRegularlyUpdated(pActInfo->myID, true);
 			if (GetPortBool(pActInfo, eI_UseAsState))
 				gEnv->pFlashUI->GetUIActionManager()->EnableAction(m_pAction, false);

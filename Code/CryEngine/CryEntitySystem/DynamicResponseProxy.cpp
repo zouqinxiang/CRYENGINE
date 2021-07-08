@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "stdafx.h"
 #include "DynamicResponseProxy.h"
@@ -26,7 +26,7 @@ void CEntityComponentDynamicResponse::Initialize()
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CEntityComponentDynamicResponse::ProcessEvent(SEntityEvent& event)
+void CEntityComponentDynamicResponse::ProcessEvent(const SEntityEvent& event)
 {
 	if (m_pResponseActor && event.event == ENTITY_EVENT_RESET)
 	{
@@ -40,22 +40,22 @@ void CEntityComponentDynamicResponse::ProcessEvent(SEntityEvent& event)
 }
 
 //////////////////////////////////////////////////////////////////////////
-uint64 CEntityComponentDynamicResponse::GetEventMask() const
+Cry::Entity::EventFlags CEntityComponentDynamicResponse::GetEventMask() const
 {
-	return BIT64(ENTITY_EVENT_RESET);
+	return ENTITY_EVENT_RESET;
 }
 
 //////////////////////////////////////////////////////////////////////////
 DRS::IVariableCollection* CEntityComponentDynamicResponse::GetLocalVariableCollection() const
 {
-	CRY_ASSERT_MESSAGE(m_pResponseActor, "DRS Component without an Actor detected. Should never happen.");
+	CRY_ASSERT(m_pResponseActor, "DRS Component without an Actor detected. Should never happen.");
 	return m_pResponseActor->GetLocalVariables();
 }
 
 //////////////////////////////////////////////////////////////////////////
 DRS::IResponseActor* CEntityComponentDynamicResponse::GetResponseActor() const
 {
-	CRY_ASSERT_MESSAGE(m_pResponseActor, "DRS Component without an Actor detected. Should never happen.");
+	CRY_ASSERT(m_pResponseActor, "DRS Component without an Actor detected. Should never happen.");
 	return m_pResponseActor;
 }
 

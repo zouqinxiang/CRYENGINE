@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -36,7 +36,7 @@ public:
 	virtual ~CSmartObjectStateDialog();
 
 	void    SetSOState(const CString& sSOState) { m_sSOState = sSOState; }
-	CString GetSOState()                        { return m_sSOState; };
+	CString GetSOState()                        { return m_sSOState; }
 
 	// Dialog Data
 	enum { IDD = IDD_AIANCHORS };

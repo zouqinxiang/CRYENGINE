@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 // -------------------------------------------------------------------------
 //  File name:   stdafx.h
@@ -31,16 +31,7 @@ const int nThreadsNum = 3;
 //#define DEFINE_MODULE_NAME "Cry3DEngine"
 
 //////////////////////////////////////////////////////////////////////////////////////////////
-// Highlevel defines
-
-// deferred cull queue handling - currently disabled
-// #define USE_CULL_QUEUE
-
-// Crysis3 as it's dx11 only can simply use the zbufferculler everywhere
-// Older CCoverageBuffer currently does not compile
-#if 1
-	#define OCCLUSIONCULLER CZBufferCuller
-#endif
+// High level defines
 
 // Compilation (Export to Engine) not needed on consoles
 #if CRY_PLATFORM_DESKTOP
@@ -72,7 +63,6 @@ const int nThreadsNum = 3;
 #include <CryRenderer/IRenderer.h>
 #include <CryRenderer/IRenderAuxGeom.h>
 #include <Cry3DEngine/IRenderNode.h>
-#include <CryCore/Containers/StackContainer.h>
 #include <Cry3DEngine/I3DEngine.h>
 #include <CrySystem/File/ICryPak.h>
 #include <CrySystem/File/CryFile.h>
@@ -92,8 +82,6 @@ const int nThreadsNum = 3;
 #include "Vegetation.h"
 #include "terrain.h"
 #include "ObjectsTree.h"
-
-#include <CrySystem/Profilers/FrameProfiler/FrameProfiler_JobSystem.h>  // to be removed
 
 template<class T>
 void AddToPtr(byte*& pPtr, T& rObj, EEndian eEndian)
@@ -177,7 +165,7 @@ struct TriangleIndex
 	uint16        nCull;
 };
 
-#define FUNCTION_PROFILER_3DENGINE FUNCTION_PROFILER(gEnv->pSystem, PROFILE_3DENGINE)
+#define FUNCTION_PROFILER_3DENGINE CRY_PROFILE_FUNCTION(PROFILE_3DENGINE)
 
 #if CRY_PLATFORM_DESKTOP
 	#define INCLUDE_SAVECGF

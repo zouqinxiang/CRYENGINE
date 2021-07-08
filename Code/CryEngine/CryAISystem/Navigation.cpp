@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /********************************************************************
    CryGame Source File.
@@ -18,13 +18,8 @@
 
 #include "Navigation.h"
 #include "PolygonSetOps/Polygon2d.h"
-#include "FlightNavRegion2.h"
-#include "Free2DNavRegion.h"
 
-#include "Navigation/CustomNavRegion.h"
 #include "DebugDrawContext.h"
-#include "Graph.h"
-#include "CalculationStopper.h"
 #include <CrySystem/File/CryBufferedFileReader.h>
 
 static const int maxForbiddenNameLen = 1024;
@@ -53,18 +48,14 @@ void CNavigation::ShutDown()
 //-----------------------------------------------------------------------------------------------------------
 void CNavigation::LoadNavigationData(const char* szLevel, const char* szMission)
 {
-	LOADING_TIME_PROFILE_SECTION(GetISystem());
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 
 	CTimeValue startTime = gEnv->pTimer->GetAsyncCurTime();
 	
 	char fileNameAreas[1024];
 	cry_sprintf(fileNameAreas, "%s/areas%s.bai", szLevel, szMission);
 
-#if defined(SEG_WORLD)
-	GetAISystem()->ReadAreasFromFile(fileNameAreas, Vec3(0));
-#else
 	GetAISystem()->ReadAreasFromFile(fileNameAreas);
-#endif
 
 	CTimeValue endTime = gEnv->pTimer->GetAsyncCurTime();
 	AILogLoading("Navigation Data Loaded in %5.2f sec", (endTime - startTime).GetSeconds());
@@ -102,11 +93,7 @@ bool CNavigation::GetDesignerPath(const char* szName, SShape& path) const
 //====================================================================
 // ReadPolygonArea
 //====================================================================
-#if defined(SEG_WORLD)
-bool ReadPolygonArea(CCryBufferedFileReader& file, int version, string& name, ListPositions& pts, const Vec3& vSegmentOffset)
-#else
 bool ReadPolygonArea(CCryBufferedFileReader& file, int version, string& name, ListPositions& pts)
-#endif
 {
 	unsigned nameLen = maxForbiddenNameLen;
 	file.ReadType(&nameLen);
@@ -127,9 +114,6 @@ bool ReadPolygonArea(CCryBufferedFileReader& file, int version, string& name, Li
 	{
 		Vec3 pt;
 		file.ReadType(&pt);
-#if defined(SEG_WORLD)
-		pt += vSegmentOffset;
-#endif
 		pts.push_back(pt);
 	}
 	return true;
@@ -137,20 +121,9 @@ bool ReadPolygonArea(CCryBufferedFileReader& file, int version, string& name, Li
 
 //
 // Reads (designer paths) areas from file. clears the existing areas
-// SEG_WORLD: adds offset to the areas read, and doesn't clear existing areas.
-#if defined(SEG_WORLD)
-void CNavigation::ReadAreasFromFile(CCryBufferedFileReader& file, int fileVersion, const Vec3& vSegmentOffset)
-#else
 void CNavigation::ReadAreasFromFile(CCryBufferedFileReader& file, int fileVersion)
-#endif
 {
-#if defined(SEG_WORLD)
-	// don't flush all areas here if we're in segmented world
-	if (!gEnv->p3DEngine->GetSegmentsManager()) //@TODO: make seg-world manager available from gEnv.
-		FlushAllAreas();
-#else
 	FlushAllAreas();
-#endif
 
 	unsigned numAreas;
 
@@ -163,11 +136,7 @@ void CNavigation::ReadAreasFromFile(CCryBufferedFileReader& file, int fileVersio
 		{
 			ListPositions lp;
 			string name;
-#if defined(SEG_WORLD)
-			ReadPolygonArea(file, fileVersion, name, lp, vSegmentOffset);
-#else
 			ReadPolygonArea(file, fileVersion, name, lp);
-#endif
 
 			int navType(0), type(0);
 			bool closed(false);
@@ -350,14 +319,6 @@ void CNavigation::GetPointOnPathBySegNo(const char* szPathName, Vec3& vResult, f
 	vResult = *cur;
 }
 
-//====================================================================
-// IsSegmentValid
-//====================================================================
-bool CNavigation::IsSegmentValid(IAISystem::tNavCapMask navCap, float rad, const Vec3& posFrom, Vec3& posTo, IAISystem::ENavigationType& navTypeFrom) const
-{
-	return CheckWalkability(posFrom, posTo, rad + 0.15f, &posTo);
-}
-
 void CNavigation::FlushAllAreas()
 {
 	m_mapDesignerPaths.clear();
@@ -460,7 +421,7 @@ const char* CNavigation::GetNearestPathOfTypeInRange(IAIObject* requester, const
 		else
 		{
 			// Distance to nearest point on path.
-			ListPositions::const_iterator nearest = path.NearestPointOnPath(reqPos, false, d, tmp);
+			path.NearestPointOnPath(reqPos, false, d, tmp);
 		}
 
 		if (d < closestShapeDist)
@@ -486,7 +447,7 @@ const char* CNavigation::GetNearestPathOfTypeInRange(IAIObject* requester, const
 //====================================================================
 IAISystem::ENavigationType CNavigation::CheckNavigationType(const Vec3& pos, int& nBuildingID, IAISystem::tNavCapMask navCapMask) const
 {
-	FUNCTION_PROFILER(GetISystem(), PROFILE_AI);
+	CRY_PROFILE_FUNCTION(PROFILE_AI);
 
 	if (navCapMask & IAISystem::NAV_TRIANGULAR)
 		return IAISystem::NAV_TRIANGULAR;

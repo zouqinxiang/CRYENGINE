@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 // -------------------------------------------------------------------------
 //  File name:   debugcallstack.cpp
@@ -14,10 +14,15 @@
 #include "StdAfx.h"
 #include "DebugCallStack.h"
 #include <CryThreading/IThreadManager.h>
+#include <CryInput/IInput.h>
+
+#include <mutex>
+#include <condition_variable>
+#include <chrono>
 
 #if CRY_PLATFORM_WINDOWS
 
-	#include <CrySystem/IConsole.h>
+	#include <CrySystem/ConsoleRegistration.h>
 	#include <CryScriptSystem/IScriptSystem.h>
 	#include "JiraClient.h"
 	#include "System.h"
@@ -29,7 +34,8 @@ LINK_SYSTEM_LIBRARY("version.lib")
 	#include <CryCore/Platform/CryWindows.h>
 	#include <dbghelp.h> // requires <windows.h>
 	#pragma comment( lib, "dbghelp" )
-	#pragma warning(disable: 4244)
+	#pragma warning(push)
+	#pragma warning(disable: 4244) //conversion' conversion from 'type1' to 'type2', possible loss of data
 
 	#ifdef CRY_USE_CRASHRPT
 		#include <CrashRpt.h>
@@ -86,49 +92,93 @@ BOOL CALLBACK EnumModules(
 class CCaptureCrashScreenShot : public IThread
 {
 public:
-	CCaptureCrashScreenShot() : m_bRun(true), m_threadId(THREADID_NULL) {}
-
 	void ThreadEntry()
 	{
 		m_threadId = CryGetCurrentThreadId();
-		while (true)
+
+		for (; !m_interrupt_flag;)
 		{
 			// Wait for work
-			m_mutex.Lock();
-			m_condition.Wait(m_mutex);
-			m_mutex.Unlock();
+			{
+				std::unique_lock<std::mutex> l(m);
+				m_cvSignal.wait(l, [this]() { return m_interrupt_flag || m_signal_flag; });
+			}
 
-			// Escape
-			if (!m_bRun)
-				break;
+			if (!m_interrupt_flag)
+				IDebugCallStack::Screenshot("error.jpg");
 
-			// Get screenshot
-			IDebugCallStack::Screenshot("error.jpg");
-
-			// Notify caller that work is done
-			m_mutex.Lock();
-			m_condition.Notify();
-			m_mutex.Unlock();
+			// Signal capture end
+			{
+				std::unique_lock<std::mutex> l(m);
+				m_signal_flag = false;
+				m_cvCapture.notify_all();
+			}
 		}
 	}
 
+	// Signal interrupt
 	void SignalStopWork()
 	{
-		m_bRun = false;
-
-		m_mutex.Lock();
-		m_condition.Notify();
-		m_mutex.Unlock();
+		std::unique_lock<std::mutex> l(m);
+		m_interrupt_flag = true;
+		m_cvSignal.notify_one();
+		m_cvCapture.notify_all();
 	}
 
-	CryMutex             m_mutex;
-	CryConditionVariable m_condition;
+	// Signal capture, and wait for completion.
+	// Returns true if captured, false if interrupted or timed-out.
+	template <class Rep, class Period>
+	bool SignalCaptureAndWait(const std::chrono::duration<Rep, Period> &duration = std::chrono::steady_clock::duration::max())
+	{
+		{
+			// Notify worker
+			std::unique_lock<std::mutex> l(m);
+			m_signal_flag = true;
+			m_cvSignal.notify_one();
+		}
 
-	volatile bool        m_bRun;
-	threadID             m_threadId;
+		{
+			// Wait
+			std::unique_lock<std::mutex> l(m);
+			m_cvCapture.wait_for(l, duration, [this]() { return m_interrupt_flag || !m_signal_flag; });
+			return !m_signal_flag;
+		}
+	}
+
+	const threadID& GetThreadId() const noexcept { return m_threadId; }
+
+private:
+	std::mutex              m;
+	std::condition_variable m_cvSignal, m_cvCapture;
+
+	bool                    m_interrupt_flag = false;
+	bool                    m_signal_flag = false;
+	threadID                m_threadId = THREADID_NULL;
 };
 
 CCaptureCrashScreenShot g_screenShotThread;
+
+MINIDUMP_TYPE GetMiniDumpType()
+{
+	switch (g_cvars.sys_dump_type)
+	{
+	case 0:
+		return (MINIDUMP_TYPE)(MiniDumpValidTypeFlags + 1); // guaranteed to be invalid
+		break;
+	case 1:
+		return MiniDumpNormal;
+		break;
+	case 2:
+		return (MINIDUMP_TYPE)(MiniDumpWithIndirectlyReferencedMemory | MiniDumpWithDataSegs);
+		break;
+	case 3:
+		return MiniDumpWithFullMemory;
+		break;
+	default:
+		return (MINIDUMP_TYPE)g_cvars.sys_dump_type;
+		break;
+	}
+}
 
 	#ifdef CRY_USE_CRASHRPT
 struct CCrashRptCVars
@@ -169,6 +219,11 @@ bool CCrashRpt::InstallHandler()
 	info.cb = sizeof(CR_INSTALL_INFO);
 	info.pszAppName = NULL; //NULL == Use exe filname _T("CRYENGINE");
 	info.pszAppVersion = NULL; //NULL == Extract from the executable  _T("1.0.0");
+	MINIDUMP_TYPE mdumpType = GetMiniDumpType();
+	if (mdumpType == (MINIDUMP_TYPE)(mdumpType & MiniDumpValidTypeFlags))
+	{
+		info.uMiniDumpType = mdumpType;
+	}
 	if (g_crashrpt_cvars.sys_crashrpt_appname && 0 != strlen(g_crashrpt_cvars.sys_crashrpt_appname->GetString()))
 	{
 		info.pszAppName = g_crashrpt_cvars.sys_crashrpt_appname->GetString();
@@ -224,10 +279,10 @@ bool CCrashRpt::InstallHandler()
 	//crAddScreenshot2(CR_AS_MAIN_WINDOW | CR_AS_USE_JPEG_FORMAT, 95);
 
 	// Add our log file to the error report
-	const char* logFileName = gEnv->pLog->GetFileName();
-	if (logFileName)
+	const char* logFilePath = gEnv->pLog->GetFilePath();
+	if (logFilePath)
 	{
-		crAddFile2(logFileName, NULL, "Log File", CR_AF_TAKE_ORIGINAL_FILE | CR_AF_MISSING_FILE_OK | CR_AF_ALLOW_DELETE);
+		crAddFile2(logFilePath, NULL, "Log File", CR_AF_TAKE_ORIGINAL_FILE | CR_AF_MISSING_FILE_OK | CR_AF_ALLOW_DELETE);
 	}
 	else
 	{
@@ -344,12 +399,10 @@ SFileVersion CCrashRpt::GetSystemVersionInfo()
 		UINT len(0);
 		VerQueryValue(ver, "\\", (void**)&vinfo, &len);
 
-		const uint32 verIndices[4] = { 0, 1, 2, 3 };
-
-		productVersion.v[verIndices[0]] = vinfo->dwFileVersionLS & 0xFFFF;
-		productVersion.v[verIndices[1]] = vinfo->dwFileVersionLS >> 16;
-		productVersion.v[verIndices[2]] = vinfo->dwFileVersionMS & 0xFFFF;
-		productVersion.v[verIndices[3]] = vinfo->dwFileVersionMS >> 16;
+		productVersion[0] = vinfo->dwFileVersionLS & 0xFFFF;
+		productVersion[1] = vinfo->dwFileVersionLS >> 16;
+		productVersion[2] = vinfo->dwFileVersionMS & 0xFFFF;
+		productVersion[3] = vinfo->dwFileVersionMS >> 16;
 	}
 #endif //CRY_PLATFORM_WINDOWS
 	return productVersion;
@@ -372,11 +425,6 @@ IDebugCallStack* IDebugCallStack::instance()
 // Sets up the symbols for functions in the debug file.
 //------------------------------------------------------------------------------------------------------------------------
 DebugCallStack::DebugCallStack()
-	: m_pSystem(0)
-	, m_symbols(false)
-	, m_bCrash(false)
-	, m_szBugMessage(NULL)
-	, m_previousHandler(nullptr)
 {
 	RemoveOldFiles();
 	if (gEnv && gEnv->pThreadManager)
@@ -535,9 +583,59 @@ void DebugCallStack::doneSymbols()
 
 void DebugCallStack::RemoveOldFiles()
 {
-	RemoveFile("error.log");
-	RemoveFile("error.jpg");
-	RemoveFile("error.dmp");
+	string baseName;
+
+	struct stat fileStat;
+	if (stat("error.log", &fileStat)>=0 && fileStat.st_mtime)
+	{
+		tm* today = localtime(&fileStat.st_mtime);
+		if (today)
+		{
+			char s[128];
+			strftime(s, 128, "%d %b %y (%H %M %S)", today);
+			baseName = "error_" + string(s);
+		}
+		else
+		{
+			baseName = "error";
+		}
+	}
+	else
+	{
+		baseName = "error";
+	}
+
+	baseName = PathUtil::Make("LogBackups", baseName);
+	string logDest = baseName + ".log";
+	string jpgDest = baseName + ".jpg";
+	string dmpDest = baseName + ".dmp";
+
+	MoveFile("error.log", logDest.c_str());
+	MoveFile("error.jpg", jpgDest.c_str());
+	MoveFile("error.dmp", dmpDest.c_str());
+}
+
+void DebugCallStack::MoveFile(const char* szFileNameOld, const char* szFileNameNew)
+{
+	FILE* const pFile = fopen(szFileNameOld, "r");
+
+	if (pFile)
+	{
+		fclose(pFile);
+
+		RemoveFile(szFileNameNew);
+
+		WriteLineToLog("Moving file \"%s\" to \"%s\"...", szFileNameOld, szFileNameNew);
+		if (rename(szFileNameOld, szFileNameNew) == 0)
+		{
+			WriteLineToLog("File successfully moved.");
+		}
+		else
+		{
+			WriteLineToLog("Couldn't move file!");
+			RemoveFile(szFileNameOld);
+		}
+	}
 }
 
 void DebugCallStack::RemoveFile(const char* szFileName)
@@ -632,8 +730,6 @@ int DebugCallStack::updateCallStack(EXCEPTION_POINTERS* pex)
 //////////////////////////////////////////////////////////////////////////
 void DebugCallStack::FillStackTrace(int maxStackEntries, int skipNumFunctions, HANDLE hThread)
 {
-	HANDLE hProcess = GetCurrentProcess();
-
 	//////////////////////////////////////////////////////////////////////////
 	//////////////////////////////////////////////////////////////////////////
 
@@ -669,7 +765,7 @@ void DebugCallStack::FillStackTrace(int maxStackEntries, int skipNumFunctions, H
 	//While there are still functions on the stack..
 	for (count = 0; count < maxStackEntries && b_ret == TRUE; count++)
 	{
-		b_ret = StackWalk64(MachineType, hProcess, hThread, &stack_frame, &m_context, NULL, SymFunctionTableAccess64, SymGetModuleBase64, NULL);
+		b_ret = StackWalk64(MachineType, GetCurrentProcess(), hThread, &stack_frame, &m_context, NULL, SymFunctionTableAccess64, SymGetModuleBase64, NULL);
 
 		if (count < skipNumFunctions)
 			continue;
@@ -680,22 +776,28 @@ void DebugCallStack::FillStackTrace(int maxStackEntries, int skipNumFunctions, H
 			if (!funcName.empty())
 			{
 				m_functions.push_back(funcName);
-			}
-			else
-			{
-				void* p = (void*)(uintptr_t)stack_frame.AddrPC.Offset;
-				char str[80];
-				cry_sprintf(str, "function=0x%p", p);
-				m_functions.push_back(str);
+				continue;
 			}
 		}
-		else
+
+		// If we don't have a symbol for the address, we attempt to output module name and offset from base address so we can look it up later
+		// When the module base is unknown, we only output the raw function address
+		IMAGEHLP_MODULE64 modInfo;
+		modInfo.SizeOfStruct = sizeof(modInfo);
+		if (!SymGetModuleInfo64(GetCurrentProcess(), stack_frame.AddrPC.Offset, &modInfo))
 		{
-			void* p = (void*)(uintptr_t)stack_frame.AddrPC.Offset;
-			char str[80];
-			cry_sprintf(str, "function=0x%p", p);
-			m_functions.push_back(str);
+			CryLogAlways("Failed to get module info for 0x%" PRIx64 ", last error: %d", stack_frame.AddrPC.Offset, GetLastError());
+			m_functions.push_back(string().Format("function=0x%" PRIx64 " ", stack_frame.AddrPC.Offset));
+			continue;
 		}
+
+		DWORD64 modOffset = stack_frame.AddrPC.Offset - modInfo.BaseOfImage;
+
+		char str[300];
+		char* szImageNameLastPathSeparator = strrchr(modInfo.ImageName, '\\');
+		char* szImageName = szImageNameLastPathSeparator ? szImageNameLastPathSeparator + 1 : modInfo.ImageName;
+		cry_sprintf(str, "function=%s+0x%" PRIx64, szImageName, modOffset);
+		m_functions.push_back(str);
 	}
 }
 
@@ -885,7 +987,10 @@ int DebugCallStack::handleException(EXCEPTION_POINTERS* exception_pointer)
 		return EXCEPTION_EXECUTE_HANDLER;
 	}
 
-	gEnv->bIgnoreAllAsserts = true;
+#ifdef USE_CRY_ASSERT
+	Cry::Assert::IgnoreAllAsserts(true);
+#endif
+
 	gEnv->pLog->FlushAndClose();
 
 	ResetFPU(exception_pointer);
@@ -944,13 +1049,6 @@ int DebugCallStack::handleException(EXCEPTION_POINTERS* exception_pointer)
 		cry_sprintf(excCode, "0x%08X", exception_pointer->ExceptionRecord->ExceptionCode);
 		WriteLineToLog("Exception: %s, at Address: %s", excCode, excAddr);
 
-		if (CSystem* pSystem = (CSystem*)GetSystem())
-		{
-			if (const char* pLoadingProfilerCallstack = pSystem->GetLoadingProfilerCallstack())
-				if (pLoadingProfilerCallstack[0])
-					WriteLineToLog("<CrySystem> LoadingProfilerCallstack: %s", pLoadingProfilerCallstack);
-		}
-
 		{
 			IMemoryManager::SProcessMemInfo memInfo;
 			if (gEnv->pSystem->GetIMemoryManager()->GetProcessMemInfo(memInfo))
@@ -994,15 +1092,10 @@ int DebugCallStack::handleException(EXCEPTION_POINTERS* exception_pointer)
 	}
 	else if (ret == IDB_IGNORE)
 	{
-	#if CRY_PLATFORM_32BIT
-		exception_pointer->ContextRecord->FloatSave.StatusWord &= ~31;
-		exception_pointer->ContextRecord->FloatSave.ControlWord |= 7;
-		(*(WORD*)(exception_pointer->ContextRecord->ExtendedRegisters + 24) &= 31) |= 0x1F80;
-	#else
 		exception_pointer->ContextRecord->FltSave.StatusWord &= ~31;
 		exception_pointer->ContextRecord->FltSave.ControlWord |= 7;
 		(exception_pointer->ContextRecord->FltSave.MxCsr &= 31) |= 0x1F80;
-	#endif
+
 		firstTime = true;
 		callCount = 0;
 
@@ -1011,7 +1104,10 @@ int DebugCallStack::handleException(EXCEPTION_POINTERS* exception_pointer)
 			gEnv->pThreadManager->ForEachOtherThread(ResumeAnyThread);
 
 		// Resume render thread
-		gEnv->pRenderer->ResumeRendererFromFrameEnd();
+		if (gEnv->pRenderer)
+		{
+			gEnv->pRenderer->ResumeRendererFromFrameEnd();
+		}
 
 		return EXCEPTION_CONTINUE_EXECUTION;
 	}
@@ -1055,7 +1151,7 @@ void DebugCallStack::LogMemCallstackFile(int memSize)
 	CryFixedStringT<64> temp("*** Memory allocation for ");
 	temp.append(buffer);
 	temp.append(" bytes ");
-	int frame = gEnv->pRenderer->GetFrameID(false);
+	int frame = gEnv->nMainFrameID;
 	itoa(frame, buffer, 10);
 	temp.append("in frame ");
 	temp.append(buffer);
@@ -1103,9 +1199,7 @@ void ReportJiraBug()
 
 	if (!CJiraClient::ReportBug())
 	{
-	#ifndef _RELEASE
-		MessageBox(NULL, "Error running jira crash handler: bug submission failed.", "Bug submission failed", MB_OK | MB_ICONWARNING);
-	#endif
+		CryMessageBox("Error running jira crash handler: bug submission failed.", "Bug submission failed", eMB_Error);
 	}
 }
 
@@ -1269,10 +1363,9 @@ void DebugCallStack::LogExceptionInfo(EXCEPTION_POINTERS* pex)
 
 	cry_strcat(errorString, errs);
 
-	stack_string errorlogFilename(m_outputPath.c_str());
-	errorlogFilename += "error.log";
+	stack_string errorlogFilename = PathUtil::Make(stack_string(m_outputPath), stack_string("error.log"));
 
-	WriteErrorLog(errorlogFilename.c_str(),errorString);
+	WriteErrorLog(errorlogFilename.c_str(), errorString);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1281,9 +1374,14 @@ void DebugCallStack::MinimalExceptionReport(EXCEPTION_POINTERS* exception_pointe
 	if (!gEnv || !gEnv->pLog)
 		return;
 
-	gEnv->bIgnoreAllAsserts = true;
+	int prev_sys_no_crash_dialog = g_cvars.sys_no_crash_dialog;
+
+#ifdef USE_CRY_ASSERT
+	Cry::Assert::IgnoreAllAsserts(true);
+	Cry::Assert::SetAssertLevel(Cry::Assert::ELevel::Disabled);
+#endif
+
 	g_cvars.sys_no_crash_dialog = 1;
-	g_cvars.sys_asserts = 0;
 
 	CrySpinLock(&s_exception_handler_lock, 0, 1);
 
@@ -1313,15 +1411,6 @@ void DebugCallStack::MinimalExceptionReport(EXCEPTION_POINTERS* exception_pointe
 	gEnv->pLog->SetLogMode(eLogMode_AppCrash); // Log straight to file
 
 
-	// If in full screen minimize render window
-	{
-		ICVar* pFullscreen = (gEnv && gEnv->pConsole) ? gEnv->pConsole->GetCVar("r_Fullscreen") : 0;
-		if (pFullscreen && pFullscreen->GetIVal() != 0 && gEnv->pRenderer && gEnv->pRenderer->GetHWND())
-		{
-			::ShowWindow((HWND)gEnv->pRenderer->GetHWND(), SW_MINIMIZE);
-		}
-	}
-
 	if (initSymbols())
 	{
 		// Rise exception to call updateCallStack method.
@@ -1331,7 +1420,45 @@ void DebugCallStack::MinimalExceptionReport(EXCEPTION_POINTERS* exception_pointe
 
 		doneSymbols();
 	}
-	CaptureScreenshot();
+
+	if (gEnv->pRenderer)
+	{
+		threadID renderThread = 0, mainThread = 0;
+		gEnv->pRenderer->GetThreadIDs(mainThread, renderThread);
+
+		// Resume the screenshot and render thread
+		gEnv->pThreadManager->ForEachOtherThread(ResumeTargetThread, (void*)(&g_screenShotThread.GetThreadId()));
+		gEnv->pThreadManager->ForEachOtherThread(ResumeTargetThread, (void*)(&renderThread));
+
+		gEnv->pLog->ThreadExclusiveLogAccess(false);
+		CaptureScreenshot();
+	}
+
+	// If in full screen minimize render window
+	{
+		ICVar* pFullscreen = (gEnv && gEnv->pConsole) ? gEnv->pConsole->GetCVar("r_Fullscreen") : 0;
+		if (pFullscreen && pFullscreen->GetIVal() != 0 && gEnv->pRenderer && gEnv->pRenderer->GetHWND())
+			::PostMessage((HWND)gEnv->pRenderer->GetHWND(), WM_SYSCOMMAND, SC_MINIMIZE, 0);
+	}
+
+	g_cvars.sys_no_crash_dialog = prev_sys_no_crash_dialog;
+	const bool bQuitting = !gEnv || !gEnv->pSystem || gEnv->pSystem->IsQuitting();
+	if (g_cvars.sys_no_crash_dialog == 0 && g_bUserDialog && gEnv->IsEditor() && !bQuitting && exception_pointer)
+	{
+		EQuestionResult res = CryMessageBox("WARNING!\n\nThe engine / game / editor crashed and is now unstable.\r\nSaving may cause level corruption or further crashes.\r\n\r\nProceed with Save ? ", "Crash", eMB_YesCancel);
+		if (res == eQR_Yes)
+		{
+			// Make one additional backup.
+			if (BackupCurrentLevel())
+			{
+				CryMessageBox("Level has been successfully saved!\r\nPress Ok to terminate Editor.", "Save");
+			}
+			else
+			{
+				CryMessageBox("Error saving level.\r\nPress Ok to terminate Editor.", "Save", eMB_Error);
+			}
+		}
+	}
 
 	CrySpinLock(&s_exception_handler_lock, 1, 0);
 }
@@ -1372,19 +1499,12 @@ void DebugCallStack::CaptureScreenshot()
 	// Allow screenshot thread to write to log, too
 	gEnv->pLog->ThreadExclusiveLogAccess(false);
 
-	// Resume the screenshot thread
-	gEnv->pThreadManager->ForEachOtherThread(ResumeTargetThread, (void*)(&g_screenShotThread.m_threadId));
-
 	// Notify and wait for screenshot thread
-	g_screenShotThread.m_mutex.Lock();
-	g_screenShotThread.m_condition.Notify();
-
-	if (!g_screenShotThread.m_condition.TimedWait(g_screenShotThread.m_mutex, 2000))
+	if (!g_screenShotThread.SignalCaptureAndWait(std::chrono::seconds(2)))
 	{
 		WriteLineToLog("----- FAILED TO GET SCREENSHOT -----");
 	}
 
-	g_screenShotThread.m_mutex.Unlock();
 
 	// Re-enable exclusive logging for this thread
 	gEnv->pLog->ThreadExclusiveLogAccess(true);
@@ -1440,9 +1560,33 @@ void DebugCallStack::GenerateCrashReport()
 //////////////////////////////////////////////////////////////////////////
 void DebugCallStack::RegisterCVars()
 {
+	#if defined DEDICATED_SERVER
+		const int DEFAULT_DUMP_TYPE = 3;
+	#else
+		const int DEFAULT_DUMP_TYPE = 1;
+	#endif
+
 	#ifdef CRY_USE_CRASHRPT
 	CCrashRpt::RegisterCVars();
+	REGISTER_CVAR2_CB("sys_dump_type", &g_cvars.sys_dump_type, DEFAULT_DUMP_TYPE, VF_NULL,
+		"Specifies type of crash dump to create - see MINIDUMP_TYPE in dbghelp.h for full list of values\n"
+		"0: Do not create a minidump (not valid if using CrashRpt)\n"
+		"1: Create a small minidump (stacktrace)\n"
+		"2: Create a medium minidump (+ some variables)\n"
+		"3: Create a full minidump (+ all memory)\n", 
+		&CCrashRpt::ReInstallCrashRptHandler
+	);
+	#else
+	REGISTER_CVAR2("sys_dump_type", &g_cvars.sys_dump_type, DEFAULT_DUMP_TYPE, VF_NULL,
+		"Specifies type of crash dump to create - see MINIDUMP_TYPE in dbghelp.h for full list of values\n"
+		"0: Do not create a minidump (not valid if using CrashRpt)\n"
+		"1: Create a small minidump (stacktrace)\n"
+		"2: Create a medium minidump (+ some variables)\n"
+		"3: Create a full minidump (+ all memory)\n"
+	);
 	#endif
+
+
 }
 
 INT_PTR CALLBACK DebugCallStack::ExceptionDialogProc(HWND hwndDlg, UINT message, WPARAM wParam, LPARAM lParam)
@@ -1530,15 +1674,6 @@ int DebugCallStack::SubmitBug(EXCEPTION_POINTERS* exception_pointer)
 
 	assert(!hwndException);
 
-	// If in full screen minimize render window
-	{
-		ICVar* pFullscreen = (gEnv && gEnv->pConsole) ? gEnv->pConsole->GetCVar("r_Fullscreen") : 0;
-		if (pFullscreen && pFullscreen->GetIVal() != 0 && gEnv->pRenderer && gEnv->pRenderer->GetHWND())
-		{
-			::ShowWindow((HWND)gEnv->pRenderer->GetHWND(), SW_MINIMIZE);
-		}
-	}
-
 	//hwndException = CreateDialog( gDLLHandle,MAKEINTRESOURCE(IDD_EXCEPTION),NULL,NULL );
 
 	RemoveOldFiles();
@@ -1573,31 +1708,31 @@ int DebugCallStack::SubmitBug(EXCEPTION_POINTERS* exception_pointer)
 
 	LogExceptionInfo(exception_pointer);
 
-	CaptureScreenshot();
+	if (gEnv->pRenderer)
+	{
+		threadID renderThread = 0, mainThread = 0;
+		gEnv->pRenderer->GetThreadIDs(mainThread, renderThread);
+
+		// Resume the screenshot and render thread
+		gEnv->pThreadManager->ForEachOtherThread(ResumeTargetThread, (void*)(&g_screenShotThread.GetThreadId()));
+		gEnv->pThreadManager->ForEachOtherThread(ResumeTargetThread, (void*)(&renderThread));
+
+		gEnv->pLog->ThreadExclusiveLogAccess(false);
+		CaptureScreenshot();
+	}
+
+	// If in full screen minimize render window
+	{
+		ICVar* pFullscreen = (gEnv && gEnv->pConsole) ? gEnv->pConsole->GetCVar("r_Fullscreen") : 0;
+		if (pFullscreen && pFullscreen->GetIVal() != 0 && gEnv->pRenderer && gEnv->pRenderer->GetHWND())
+			::PostMessage((HWND)gEnv->pRenderer->GetHWND(), WM_SYSCOMMAND, SC_MINIMIZE, 0);
+	}
 
 	if (exception_pointer)
 	{
-		MINIDUMP_TYPE mdumpValue;
-		bool bDump = true;
-		switch (g_cvars.sys_dump_type)
-		{
-		case 0:
-			bDump = false;
-			break;
-		case 1:
-			mdumpValue = MiniDumpNormal;
-			break;
-		case 2:
-			mdumpValue = (MINIDUMP_TYPE)(MiniDumpWithIndirectlyReferencedMemory | MiniDumpWithDataSegs);
-			break;
-		case 3:
-			mdumpValue = MiniDumpWithFullMemory;
-			break;
-		default:
-			mdumpValue = (MINIDUMP_TYPE)g_cvars.sys_dump_type;
-			break;
-		}
-		if (bDump)
+		MINIDUMP_TYPE mdumpType = GetMiniDumpType();
+
+		if (mdumpType == (MINIDUMP_TYPE)(mdumpType & MiniDumpValidTypeFlags))
 		{
 			stack_string fileName = "error.dmp";
 #if defined(DEDICATED_SERVER)
@@ -1617,7 +1752,7 @@ int DebugCallStack::SubmitBug(EXCEPTION_POINTERS* exception_pointer)
 			}
 #endif // defined(DEDICATED_SERVER)
 
-			CryEngineExceptionFilterMiniDump(exception_pointer, fileName.c_str(), mdumpValue);
+			CryEngineExceptionFilterMiniDump(exception_pointer, fileName.c_str(), mdumpType);
 		}
 	}
 
@@ -1673,10 +1808,6 @@ void DebugCallStack::ResetFPU(EXCEPTION_POINTERS* pex)
 	{
 		// How to reset FPU: http://www.experts-exchange.com/Programming/System/Windows__Programming/Q_10310953.html
 		_clearfp();
-	#if CRY_PLATFORM_32BIT
-		pex->ContextRecord->FloatSave.ControlWord |= 0x2F;
-		pex->ContextRecord->FloatSave.StatusWord &= ~0x8080;
-	#endif
 	}
 }
 
@@ -1687,7 +1818,6 @@ int __cdecl WalkStackFrames(CONTEXT& context, void** pCallstack, int maxStackEnt
 	BOOL b_ret = TRUE; //Setup stack frame
 
 	HANDLE hThread = GetCurrentThread();
-	HANDLE hProcess = GetCurrentProcess();
 
 	STACKFRAME64 stack_frame;
 
@@ -1715,7 +1845,7 @@ int __cdecl WalkStackFrames(CONTEXT& context, void** pCallstack, int maxStackEnt
 	//While there are still functions on the stack..
 	for (count = 0; count < maxStackEntries && b_ret == TRUE; count++)
 	{
-		b_ret = StackWalk64(MachineType, hProcess, hThread, &stack_frame, &context, NULL, SymFunctionTableAccess64, SymGetModuleBase64, NULL);
+		b_ret = StackWalk64(MachineType, GetCurrentProcess(), hThread, &stack_frame, &context, NULL, SymFunctionTableAccess64, SymGetModuleBase64, NULL);
 		pCallstack[count] = (void*)(stack_frame.AddrPC.Offset);
 	}
 	return count;
@@ -1731,8 +1861,6 @@ int DebugCallStack::CollectCallStackFrames(void** pCallstack, int maxStackEntrie
 	}
 
 	CONTEXT context = CaptureCurrentContext();
-
-	HANDLE hProcess = GetCurrentProcess();
 
 	int count = WalkStackFrames(context, pCallstack, maxStackEntries);
 	return count;
@@ -1755,7 +1883,7 @@ int DebugCallStack::CollectCallStack(HANDLE thread, void** pCallstack, int maxSt
 	#endif
 	int prev_priority = GetThreadPriority(thread);
 	SetThreadPriority(thread, THREAD_PRIORITY_TIME_CRITICAL);
-	BOOL result = GetThreadContext(thread, &context);
+	GetThreadContext(thread, &context);
 	::SetThreadPriority(thread, prev_priority);
 	return WalkStackFrames(context, pCallstack, maxStackEntries);
 }
@@ -1821,6 +1949,8 @@ int DebugCallStack::PrintException(EXCEPTION_POINTERS* exception_pointer)
 {
 	return DialogBoxParam(gDLLHandle, MAKEINTRESOURCE(IDD_CRITICAL_ERROR), NULL, DebugCallStack::ExceptionDialogProc, (LPARAM)exception_pointer);
 }
+
+	#pragma warning(pop)
 
 #else
 void MarkThisThreadForDebugging(const char*) {}

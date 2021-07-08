@@ -1,8 +1,9 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "DangerousRigidBody.h"
 #include "GameRules.h"
+#include "GameCVars.h"
 
 int CDangerousRigidBody::sDangerousRigidBodyHitTypeId	= -1;
 
@@ -54,7 +55,7 @@ bool CDangerousRigidBody::NetSerialize( TSerialize ser, EEntityAspects aspect, u
 	return true;
 }
 
-void CDangerousRigidBody::ProcessEvent( SEntityEvent& event )
+void CDangerousRigidBody::ProcessEvent( const SEntityEvent& event )
 {
 	switch(event.event)
 	{
@@ -101,6 +102,11 @@ void CDangerousRigidBody::ProcessEvent( SEntityEvent& event )
 	}
 }
 
+Cry::Entity::EventFlags CDangerousRigidBody::GetEventMask() const
+{
+	return ENTITY_EVENT_COLLISION | ENTITY_EVENT_RESET;
+}
+
 void CDangerousRigidBody::GetMemoryUsage( ICrySizer *pSizer ) const
 {
 	pSizer->Add(*this);
@@ -110,14 +116,14 @@ bool CDangerousRigidBody::ReloadExtension( IGameObject * pGameObject, const SEnt
 {
 	ResetGameObject();
 
-	CRY_ASSERT_MESSAGE(false, "CDangerousRigidBody::ReloadExtension not implemented");
+	CRY_ASSERT(false, "CDangerousRigidBody::ReloadExtension not implemented");
 
 	return true;
 }
 
 bool CDangerousRigidBody::GetEntityPoolSignature( TSerialize signature )
 {
-	CRY_ASSERT_MESSAGE(false, "CDangerousRigidBody::GetEntityPoolSignature not implemented");
+	CRY_ASSERT(false, "CDangerousRigidBody::GetEntityPoolSignature not implemented");
 
 	return true;
 }

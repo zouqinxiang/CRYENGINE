@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -43,7 +43,7 @@ namespace UQS
 			, m_itemCount(itemList.GetItemCount())
 		{
 			// ensure type correctness (this presumes that given item-list has already been provided with an item-factory)
-			assert(m_pItemFactory->GetItemType() == Shared::SDataTypeHelper<TItem>::GetTypeInfo());
+			CRY_ASSERT(m_pItemFactory->GetItemType() == Shared::SDataTypeHelper<TItem>::GetTypeInfo());
 		}
 
 		template <class TItem>
@@ -64,7 +64,7 @@ namespace UQS
 		template <class TItem>
 		const TItem& CItemListProxy_Readable<TItem>::GetItemAtIndex(size_t index) const
 		{
-			assert(index < m_itemCount);
+			CRY_ASSERT(index < m_itemCount);
 			return *static_cast<const TItem*>(m_pItemFactory->GetItemAtIndex(m_pItems, index));
 		}
 
@@ -80,6 +80,7 @@ namespace UQS
 		public:
 			explicit                  CItemListProxy_Writable(Core::IItemList& itemList);
 			void                      CreateItemsByItemFactory(size_t numItemsToCreate);
+			void                      CloneItems(const TItem* pOriginalItems, size_t numItemsToClone);
 			TItem&                    GetItemAtIndex(size_t index);
 			Core::IItemList&          GetUnderlyingItemList();
 
@@ -105,7 +106,7 @@ namespace UQS
 			, m_itemCount(itemList.GetItemCount())  // ditto
 		{
 			// ensure type correctness (this presumes that given item-list has already been provided with an item-factory)
-			assert(itemList.GetItemFactory().GetItemType() == Shared::SDataTypeHelper<TItem>::GetTypeInfo());
+			CRY_ASSERT(itemList.GetItemFactory().GetItemType() == Shared::SDataTypeHelper<TItem>::GetTypeInfo());
 		}
 
 		template <class TItem>
@@ -119,9 +120,21 @@ namespace UQS
 		}
 
 		template <class TItem>
+		void CItemListProxy_Writable<TItem>::CloneItems(const TItem* pOriginalItems, size_t numItemsToClone)
+		{
+			CRY_ASSERT(pOriginalItems);
+
+			m_itemList.CloneItems(pOriginalItems, numItemsToClone);
+
+			// retrieve the items in case they hadn't been created in a previous roundtrip
+			m_pItems = m_itemList.GetItems();
+			m_itemCount = numItemsToClone;
+		}
+
+		template <class TItem>
 		TItem& CItemListProxy_Writable<TItem>::GetItemAtIndex(size_t index)
 		{
-			assert(index < m_itemCount);
+			CRY_ASSERT(index < m_itemCount);
 			return *static_cast<TItem*>(m_itemFactory.GetItemAtIndex(m_pItems, index));
 		}
 

@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -32,6 +32,8 @@ public:
 	virtual QVariant                           GetId() const override;
 	virtual bool                               HasId(QVariant id) const override;
 	// ~CryGraphEditor::CAbstractConnectionItem
+
+	Schematyc::IScriptGraphLink& GetScriptLink() const { return m_scriptGraphLink; }
 
 private:
 	Schematyc::IScriptGraphLink& m_scriptGraphLink;

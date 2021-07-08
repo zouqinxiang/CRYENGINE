@@ -1,10 +1,10 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /************************************************************************
 
    An Interface for actions that can be executed by Response Segments
 
-   /************************************************************************/
+************************************************************************/
 
 #ifndef _DYNAMICRESPONSEACTION_H_
 #define _DYNAMICRESPONSEACTION_H_
@@ -22,7 +22,7 @@ typedef std::unique_ptr<IResponseActionInstance> IResponseActionInstanceUniquePt
 
 struct IResponseAction : public IEditorObject
 {
-	virtual ~IResponseAction() {}
+	virtual ~IResponseAction() = default;
 
 	/**
 	 * Will execute the action. If the action is not an instantaneous action, it can return an ActionInstance, which is then updated as long as needed by the DRS to finish the execution of the action
@@ -56,7 +56,7 @@ struct IResponseActionInstance
 		CS_RUNNING_NON_BLOCKING,  //the action is not done, but the response-instance should not wait for it to finish. The response instance is allowed to continue with the next follow-up response. Can be useful for actions that should be updated the whole time while the response instance is running, remark: that the actionInstance will still be canceled when the response instance is done.
 	};
 
-	virtual ~IResponseActionInstance() {}
+	virtual ~IResponseActionInstance() = default;
 
 	/**
 	 * This method continues the execution of an started action that takes some time to finish. Its called from the DRS System until it stops returning CS_RUNNING.

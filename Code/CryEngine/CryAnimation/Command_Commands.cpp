@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "stdafx.h"
 #include "Command_Commands.h"
@@ -15,105 +15,138 @@
 #include "AttachmentBone.h"
 #include "AttachmentPRow.h"
 #include "PoseModifier/PoseModifierHelper.h"
+#include <CryRenderer/IRenderAuxGeom.h>
 
 extern float g_YLine;
 
 namespace Command
 {
 
-void LoadControllers(const GlobalAnimationHeaderCAF& rGAH, const Command::CState& state, IController** controllers)
+//! Performs in-place intersection of sorted range [it1, it1End) against another sorted range [it2, it2End).
+template<typename TIt1, typename TIt2, typename TCompare>
+TIt1 inplace_set_intersection(TIt1 it1, const TIt1 it1End, TIt2 it2, const TIt2 it2End, TCompare compare)
+{
+	TIt1 itOut = it1;
+
+	while (it1 != it1End && it2 != it2End)
+	{
+		if (compare(*it1, *it2))
+		{
+			++it1;
+		}
+		else
+		{
+			if (!compare(*it2, *it1))
+			{
+				*itOut++ = *it1++;
+			}
+			++it2;
+		}
+	}
+
+	return itOut;
+}
+
+void GatherControllers(const GlobalAnimationHeaderCAF& rGAH, const Command::CState& state, IController** controllers)
 {
 	memset(controllers, 0, state.m_jointCount * sizeof(IController*));
 
 	if (rGAH.IsAssetOnDemand())
 	{
-		assert(rGAH.IsAssetLoaded());
-		if (rGAH.IsAssetLoaded() == 0)
+		if (!CRY_VERIFY(rGAH.IsAssetLoaded()))
 		{
 			return;
-			//	int nCurrentFrameID = g_pCharacterManager->m_nUpdateCounter;
-			//	CryFatalError("CryAnimation: Asset Not Loaded: %s   nCurrentFrameID: %d  Weight: %f",rCAF.GetFilePath(),nCurrentFrameID,ac.m_fWeight);
 		}
 	}
 
-	if (rGAH.m_nControllers2)
+	if (rGAH.m_nControllers2 > 0 && rGAH.m_nControllers == 0)
 	{
-		if (rGAH.m_nControllers == 0)
+		if (rGAH.m_FilePathDBACRC32)
 		{
-			uint32 dba_exists = 0;
-			if (rGAH.m_FilePathDBACRC32)
+			const auto itSearch = std::find_if(g_AnimationManager.m_arrGlobalHeaderDBA.begin(), g_AnimationManager.m_arrGlobalHeaderDBA.end(), [&rGAH](const CGlobalHeaderDBA& dbaHeader)
 			{
-				size_t numDBA_Files = g_AnimationManager.m_arrGlobalHeaderDBA.size();
-				for (uint32 d = 0; d < numDBA_Files; d++)
-				{
-					CGlobalHeaderDBA& pGlobalHeaderDBA = g_AnimationManager.m_arrGlobalHeaderDBA[d];
-					if (rGAH.m_FilePathDBACRC32 != pGlobalHeaderDBA.m_FilePathDBACRC32)
-						continue;
+				return dbaHeader.m_FilePathDBACRC32 == rGAH.m_FilePathDBACRC32;
+			});
 
-					dba_exists++;
-					break;
-				}
-
-			}
-
-			if (dba_exists)
+			if (itSearch != g_AnimationManager.m_arrGlobalHeaderDBA.end())
 			{
 				if (Console::GetInst().ca_DebugCriticalErrors)
 				{
-					//this case is virtually impossible, unless something went wrong with a DBA or maybe a CAF in a DBA was compressed to death and all controllers removed
-					//	const char* mname = state.m_pInstance->GetFilePath();
-					//	f32 fColor[4] = {1,1,0,1};
-					//	g_pAuxGeom->Draw2dLabel( 1,g_YLine, 1.2f, fColor, false,"model: %s",mname);
-					//	g_YLine+=0x10;
-					//	g_pAuxGeom->Draw2dLabel( 1,g_YLine, 2.3f, fColor, false,"No Controllers found in Asset: %02x %08x %s",rGAH.m_nControllers2,rGAH.m_FilePathDBACRC32,rGAH.m_FilePath.c_str() );
-					//	g_YLine+=23.0f;
+					// This case is virtually impossible, unless something went wrong with a DBA or maybe a CAF in a DBA was compressed to death and all controllers removed
+					// TODO: Investigate if this condition is validated against when loading assets, so that we can safely assume it's an invariant at this point.
 					CryFatalError("CryAnimation: No Controllers found in Asset: %s", rGAH.GetFilePath());
 				}
-
 				g_pISystem->Warning(VALIDATOR_MODULE_ANIMATION, VALIDATOR_WARNING, VALIDATOR_FLAG_FILE, 0, "No Controllers found in Asset: %s", rGAH.GetFilePath());
 			}
-
-			return;  //return and don't play animation, because we don't have any controllers
 		}
+		return;
 	}
 
-	const uint32* pLodJointMask = NULL;
-	uint32 lodJointMaskCount = 0;
-	if (state.m_lod > 0)
+	std::pair<CDefaultSkeleton::SJointDescriptor*, CDefaultSkeleton::SJointDescriptor*> jointList;
 	{
-		if (uint32 lodCount = state.m_pDefaultSkeleton->m_arrAnimationLOD.size())
-		{
-			uint32 lod = state.m_lod;
-			if (lod > lodCount)
-				lod = lodCount;
-			--lod;
+		jointList.first = CryStackAllocVector(CDefaultSkeleton::SJointDescriptor, state.m_jointCount, alignof(CDefaultSkeleton::SJointDescriptor));
+		jointList.second = jointList.first + state.m_jointCount;
 
-			pLodJointMask = &state.m_pDefaultSkeleton->m_arrAnimationLOD[lod][0];
-			lodJointMaskCount = state.m_pDefaultSkeleton->m_arrAnimationLOD[lod].size();
-		}
+		const auto& skeletonJoints = state.m_pDefaultSkeleton->m_crcOrderedJointDescriptors;
+		CRY_ASSERT(skeletonJoints.size() == state.m_jointCount);
+		std::copy(skeletonJoints.begin(), skeletonJoints.end(), jointList.first);
 	}
 
-	const CDefaultSkeleton::SJoint* pModelJoint = &state.m_pDefaultSkeleton->m_arrModelJoints[0];
-	uint32 jointCount = state.m_jointCount;
-	for (uint32 i = 0; i < jointCount; ++i)
+	const int forcedLod = Console::GetInst().ca_ForceAnimationLod;
+	const std::pair<const uint32*, const uint32*> lodMask = state.m_pDefaultSkeleton->FindClosestAnimationLod(forcedLod < 0 ? state.m_lod : forcedLod);
+	const std::pair<const uint32*, const uint32*> stateMask = { state.m_pJointMask, state.m_pJointMask + state.m_jointMaskCount };
+
+	struct CrcOderingComparator
 	{
-		const uint32 crc32 = pModelJoint[i].m_nJointCRC32;
-		if (pLodJointMask)
+		bool operator()(const CDefaultSkeleton::SJointDescriptor& lhs, const uint32& rhs) const { return lhs.crc32 < rhs; }
+		bool operator()(const uint32& lhs, const CDefaultSkeleton::SJointDescriptor& rhs) const { return lhs < rhs.crc32; }
+	};
+
+	if (std::distance(lodMask.first, lodMask.second) > 0)
+	{
+		jointList.second = inplace_set_intersection(jointList.first, jointList.second, lodMask.first, lodMask.second, CrcOderingComparator());
+	}
+
+	if (std::distance(stateMask.first, stateMask.second) > 0)
+	{
+		jointList.second = inplace_set_intersection(jointList.first, jointList.second, stateMask.first, stateMask.second, CrcOderingComparator());
+	}
+
+	{
+		auto itJoint = jointList.first;
+		const auto itJointEnd = jointList.second;
+
+		auto itController = rGAH.m_arrControllerLookupVector.begin();
+		const auto itControllerEnd = rGAH.m_arrControllerLookupVector.end();
+
+		while (itJoint != itJointEnd && itController != itControllerEnd)
 		{
-			if (Helper::FindFromSorted(pLodJointMask, lodJointMaskCount, crc32) == NULL)
-				continue;
+			const auto crcJoint = itJoint->crc32;
+			const auto crcController = *itController;
+
+			if (crcJoint < crcController)
+			{
+				++itJoint;
+			}
+			else
+			{
+				if (!(crcController < crcJoint))
+				{
+					const size_t controllerIndex = std::distance(rGAH.m_arrControllerLookupVector.begin(), itController);
+					controllers[itJoint->id] = rGAH.m_arrController[controllerIndex];
+					++itJoint;
+				}
+				++itController;
+			}
 		}
-
-		if (!state.IsJointActive(crc32))
-			continue;
-
-		controllers[i] = rGAH.GetControllerByJointCRC32(pModelJoint[i].m_nJointCRC32);
 	}
 }
 
 void ClearPoseBuffer::Execute(const CState& state, CEvaluationContext& context) const
 {
-	assert(m_TargetBuffer <= Command::TargetBuffer);
+	DEFINE_PROFILER_FUNCTION();
+
+	CRY_ASSERT(m_TargetBuffer <= Command::TargetBuffer);
 
 	const float identityConstant = m_nPoseInit ? 1.0f : 0.0f;
 
@@ -153,26 +186,28 @@ void ClearPoseBuffer::Execute(const CState& state, CEvaluationContext& context) 
 //this function operates on "rGlobalAnimHeaderCAF"
 void SampleAddAnimFull::Execute(const CState& state, CEvaluationContext& context) const
 {
+	DEFINE_PROFILER_FUNCTION();
 
-	const QuatT* const defaultPose = state.m_pDefaultSkeleton->m_poseDefaultData.GetJointsRelativeMain();
-	const float* const defaultScale = state.m_pDefaultSkeleton->m_poseDefaultData.GetScalingRelative();
+	const QuatT* const pDefaultPose = state.m_pDefaultSkeleton->m_poseDefaultData.GetJointsRelative();
+	const float* const pDefaultScale = state.m_pDefaultSkeleton->m_poseDefaultData.GetScalingRelative();
+	const QuatT* const pFallbackPose = state.m_pFallbackPoseData->GetJointsRelative();
 
 	const auto& rCAF = [&]() -> const GlobalAnimationHeaderCAF&
 	{
-		assert(m_nEAnimID >= 0);
+		CRY_ASSERT(m_nEAnimID >= 0);
 
 		const ModelAnimationHeader* pMAG = state.m_pDefaultSkeleton->m_pAnimationSet->GetModelAnimationHeader(m_nEAnimID);
-		assert(pMAG);
-		assert(pMAG->m_nAssetType == CAF_File);
-		assert(pMAG->m_nGlobalAnimId >= 0);
+		CRY_ASSERT(pMAG);
+		CRY_ASSERT(pMAG->m_nAssetType == CAF_File);
+		CRY_ASSERT(pMAG->m_nGlobalAnimId >= 0);
 
 		return g_AnimationManager.m_arrGlobalCAF[pMAG->m_nGlobalAnimId];
 	} ();
-	assert(rCAF.IsAssetLoaded());
+	CRY_ASSERT(rCAF.IsAssetLoaded());
 
 	PREFAST_SUPPRESS_WARNING(6255);
 	const auto parrJointControllers = static_cast<IController**>(alloca(state.m_jointCount * sizeof(IController*)));
-	LoadControllers(rCAF, state, parrJointControllers);
+	GatherControllers(rCAF, state, parrJointControllers);
 
 	const int32 bufferIndex = (m_flags & Flag_TmpBuffer) ? Command::TmpBuffer : Command::TargetBuffer;
 	const auto outputRelPose = static_cast<QuatT*>(context.m_buffers[bufferIndex + 0]);
@@ -192,31 +227,33 @@ void SampleAddAnimFull::Execute(const CState& state, CEvaluationContext& context
 
 	if (rCAF.IsAssetAdditive())
 	{
+		CRY_PROFILE_SECTION(PROFILE_ANIMATION, "SampleAddAnimFull::Execute:UpdatePoseAdd");
+
 		for (uint32 j = startingJointIndex; j < state.m_jointCount; ++j)
 		{
-			QuatT tempPose(defaultPose[j].q, defaultPose[j].t);
-			Diag33 tempScale = Diag33(defaultScale ? defaultScale[j] : 1.0f);
+			QuatT tempPose = pFallbackPose[j];
+			Diag33 tempScale = Diag33(pDefaultScale ? pDefaultScale[j] : 1.0f);
 
 			if (parrJointControllers[j])
 			{
 				const JointState ops = parrJointControllers[j]->GetOPS(keyTimeNew, tempPose.q, tempPose.t, tempScale);
 				if (ops & eJS_Orientation)
 				{
-					tempPose.q *= defaultPose[j].q;
+					tempPose.q *= pDefaultPose[j].q;
 				}
 				if (ops & eJS_Position)
 				{
-					tempPose.t += defaultPose[j].t;
+					tempPose.t += pDefaultPose[j].t;
 				}
 				if (ops & eJS_Scale)
 				{
-					tempScale *= Diag33(defaultScale ? defaultScale[j] : 1.0f);
+					tempScale *= Diag33(pDefaultScale ? pDefaultScale[j] : 1.0f);
 					context.m_isScalingPresent = true;
 				}
 
-				tempPose.q *= fsgnnz(defaultPose[j].q | tempPose.q);
+				tempPose.q *= fsgnnz(pDefaultPose[j].q | tempPose.q);
 			}
-			assert(tempPose.IsValid());
+			CRY_ASSERT(tempPose.IsValid());
 
 			outputRelPose[j].q += (tempPose.q * m_fWeight);
 			outputRelPose[j].t += (tempPose.t * m_fWeight);
@@ -225,11 +262,13 @@ void SampleAddAnimFull::Execute(const CState& state, CEvaluationContext& context
 	}
 	else
 	{
-		const QuatT* parrHemispherePose = Console::GetInst().ca_SampleQuatHemisphereFromCurrentPose ? outputRelPose : defaultPose; // joints to compare with in quaternion dot product
+		CRY_PROFILE_SECTION(PROFILE_ANIMATION, "SampleAddAnimFull::Execute:UpdatePose");
+
+		const QuatT* parrHemispherePose = Console::GetInst().ca_SampleQuatHemisphereFromCurrentPose ? outputRelPose : pDefaultPose; // joints to compare with in quaternion dot product
 		for (uint32 j = startingJointIndex; j < state.m_jointCount; ++j)
 		{
-			QuatT tempPose(defaultPose[j].q, defaultPose[j].t);
-			Diag33 tempScale = Diag33(defaultScale ? defaultScale[j] : 1.0f);
+			QuatT tempPose = pFallbackPose[j];
+			Diag33 tempScale = Diag33(pDefaultScale ? pDefaultScale[j] : 1.0f);
 
 			if (parrJointControllers[j])
 			{
@@ -243,7 +282,7 @@ void SampleAddAnimFull::Execute(const CState& state, CEvaluationContext& context
 				tempPose.q *= fsgnnz(parrHemispherePose[j].q | tempPose.q);
 			}
 
-			assert(tempPose.IsValid());
+			CRY_ASSERT(tempPose.IsValid());
 
 			outputRelPose[j].q += (tempPose.q * m_fWeight);
 			outputRelPose[j].t += (tempPose.t * m_fWeight);
@@ -258,29 +297,33 @@ void SampleAddAnimFull::Execute(const CState& state, CEvaluationContext& context
 
 	std::for_each(outputRelPose, outputRelPose + state.m_jointCount, [](const QuatT& x)
 		{
-			assert(x.q.IsValid());
-			assert(x.t.IsValid());
+			CRY_ASSERT(x.q.IsValid());
+			CRY_ASSERT(x.t.IsValid());
 	  });
 
 	std::for_each(outputRelScale, outputRelScale + state.m_jointCount, [](const float& x)
 		{
-			assert(NumberValid(x));
+			CRY_ASSERT(NumberValid(x));
 	  });
 }
 
 //this function operates on "rGlobalAnimHeaderAIM"
 void SampleAddPoseFull::Execute(const CState& state, CEvaluationContext& context) const
 {
+	DEFINE_PROFILER_FUNCTION();
 
 	const CDefaultSkeleton::SJoint* const pModelJoint = state.m_pDefaultSkeleton->m_arrModelJoints.data();
-	const QuatT* const parrDefJoints = state.m_pDefaultSkeleton->m_poseDefaultData.GetJointsRelativeMain();
-	const float* const parrDefScaling = state.m_pDefaultSkeleton->m_poseDefaultData.GetScalingRelative();
+
+	const QuatT* const pDefaultPose = state.m_pDefaultSkeleton->m_poseDefaultData.GetJointsRelative();
+	const QuatT* const pFallbackPose = state.m_pFallbackPoseData->GetJointsRelative();
+	const float* const pFallbackScale = state.m_pFallbackPoseData->GetScalingRelative();
+
 	const auto& rGlobalAnimHeaderAIM = [&]() -> const GlobalAnimationHeaderAIM&
 	{
-		assert(m_nEAnimID >= 0);
+		CRY_ASSERT(m_nEAnimID >= 0);
 		const ModelAnimationHeader* pMAG = state.m_pDefaultSkeleton->m_pAnimationSet->GetModelAnimationHeader(m_nEAnimID);
-		assert(pMAG);
-		assert(pMAG->m_nAssetType == AIM_File);
+		CRY_ASSERT(pMAG);
+		CRY_ASSERT(pMAG->m_nAssetType == AIM_File);
 		return g_AnimationManager.m_arrGlobalAIM[pMAG->m_nGlobalAnimId];
 
 	} ();
@@ -297,7 +340,7 @@ void SampleAddPoseFull::Execute(const CState& state, CEvaluationContext& context
 	const auto parrRelJointsDst = static_cast<QuatT*>(context.m_buffers[nBufferID + 0]);
 	const auto parrRelScalingDst = static_cast<float*>(context.m_buffers[nBufferID + 3]);
 	const auto parrStatusDst = static_cast<JointState*>(context.m_buffers[nBufferID + 1]);
-	const QuatT* parrHemispherePose = Console::GetInst().ca_SampleQuatHemisphereFromCurrentPose ? parrRelJointsDst : parrDefJoints; // joints to compare with in quaternion dot product
+	const QuatT* parrHemispherePose = Console::GetInst().ca_SampleQuatHemisphereFromCurrentPose ? parrRelJointsDst : pDefaultPose; // joints to compare with in quaternion dot product
 
 	const f32 fKeyTimeNew = rGlobalAnimHeaderAIM.NTime2KTime(m_fETimeNew);
 	for (uint32 j = 0; j < state.m_jointCount; ++j)
@@ -318,14 +361,14 @@ void SampleAddPoseFull::Execute(const CState& state, CEvaluationContext& context
 		}
 		else
 		{
-			rot = parrDefJoints[j].q;
-			pos = parrDefJoints[j].t;
-			scl = Diag33(parrDefScaling ? parrDefScaling[j] : 1.0f);
+			rot = pFallbackPose[j].q;
+			pos = pFallbackPose[j].t;
+			scl = Diag33(pFallbackScale ? pFallbackScale[j] : 1.0f);
 		}
-		assert(rot.IsUnit());
-		assert(rot.IsValid());
-		assert(pos.IsValid());
-		assert(scl.IsValid());
+		CRY_ASSERT(rot.IsUnit());
+		CRY_ASSERT(rot.IsValid());
+		CRY_ASSERT(pos.IsValid());
+		CRY_ASSERT(scl.IsValid());
 
 		parrRelJointsDst[j].q += m_fWeight * rot;
 		parrRelJointsDst[j].t += m_fWeight * pos;
@@ -337,27 +380,29 @@ void SampleAddPoseFull::Execute(const CState& state, CEvaluationContext& context
 
 	std::for_each(parrRelJointsDst, parrRelJointsDst + state.m_jointCount, [](const QuatT& x)
 		{
-			assert(x.q.IsValid());
-			assert(x.t.IsValid());
+			CRY_ASSERT(x.q.IsValid());
+			CRY_ASSERT(x.t.IsValid());
 	  });
 
 	std::for_each(parrRelScalingDst, parrRelScalingDst + state.m_jointCount, [](const float& x)
 		{
-			assert(NumberValid(x));
+			CRY_ASSERT(NumberValid(x));
 	  });
 }
 
 //reads content from m_SourceBuffer, multiplies the pose by a blend weight, and adds the result to the m_TargetBuffer
 void AddPoseBuffer::Execute(const CState& state, CEvaluationContext& context) const
 {
+	DEFINE_PROFILER_FUNCTION();
+
 	const AddPoseBuffer& ac = *this;
 	void** CBTemp = context.m_buffers;
 
-	assert(ac.m_SourceBuffer <= Command::TargetBuffer);
+	CRY_ASSERT(ac.m_SourceBuffer <= Command::TargetBuffer);
 	QuatT* parrRelPoseSrc = (QuatT*)  CBTemp[ac.m_SourceBuffer + 0];
 	JointState* parrStatusSrc = (JointState*)CBTemp[ac.m_SourceBuffer + 1];
 
-	assert(ac.m_TargetBuffer <= Command::TargetBuffer);
+	CRY_ASSERT(ac.m_TargetBuffer <= Command::TargetBuffer);
 	QuatT* parrRelPoseDst = (QuatT*)  CBTemp[ac.m_TargetBuffer + 0];
 	JointState* parrStatusDst = (JointState*)CBTemp[ac.m_TargetBuffer + 1];
 
@@ -373,20 +418,21 @@ void AddPoseBuffer::Execute(const CState& state, CEvaluationContext& context) co
 #ifdef _DEBUG
 	for (uint32 j = 0; j < numJoints; j++)
 	{
-		assert(parrRelPoseDst[j].q.IsValid());
-		assert(parrRelPoseDst[j].t.IsValid());
+		CRY_ASSERT(parrRelPoseDst[j].q.IsValid());
+		CRY_ASSERT(parrRelPoseDst[j].t.IsValid());
 	}
 #endif
 }
 
 void NormalizeFull::Execute(const CState& state, CEvaluationContext& context) const
 {
+	DEFINE_PROFILER_FUNCTION();
+
 	const NormalizeFull& ac = *this;
 	void** CBTemp = context.m_buffers;
 
-	assert(ac.m_TargetBuffer <= Command::TargetBuffer);
+	CRY_ASSERT(ac.m_TargetBuffer <= Command::TargetBuffer);
 	QuatT* parrRelPoseDst = (QuatT*)  CBTemp[ac.m_TargetBuffer + 0];
-	JointState* parrStatusDst = (JointState*)CBTemp[ac.m_TargetBuffer + 1];
 
 	f32 fDotLocator = fabsf(parrRelPoseDst[0].q | parrRelPoseDst[0].q);
 	if (fDotLocator > 0.0001f)
@@ -402,13 +448,15 @@ void NormalizeFull::Execute(const CState& state, CEvaluationContext& context) co
 			parrRelPoseDst[i].q *= isqrt_tpl(dot);
 		else
 			parrRelPoseDst[i].q.SetIdentity();
-		assert(parrRelPoseDst[i].q.IsUnit());
+		CRY_ASSERT(parrRelPoseDst[i].q.IsUnit());
 	}
 }
 
 void ScaleUniformFull::Execute(const CState& state, CEvaluationContext& context) const
 {
-	assert(m_TargetBuffer <= Command::TargetBuffer);
+	DEFINE_PROFILER_FUNCTION();
+
+	CRY_ASSERT(m_TargetBuffer <= Command::TargetBuffer);
 
 	const auto parrRelPoseDst = static_cast<QuatT*>(context.m_buffers[m_TargetBuffer + 0]);
 	const auto parrStatusDst = static_cast<JointState*>(context.m_buffers[m_TargetBuffer + 1]);
@@ -423,8 +471,8 @@ void ScaleUniformFull::Execute(const CState& state, CEvaluationContext& context)
 
 	std::for_each(parrRelPoseDst, parrRelPoseDst + state.m_jointCount, [](const QuatT& x)
 		{
-			assert(x.q.IsValid());
-			assert(x.t.IsValid());
+			CRY_ASSERT(x.q.IsValid());
+			CRY_ASSERT(x.t.IsValid());
 	  });
 }
 
@@ -438,8 +486,9 @@ struct SAbsoluteTransform
 
 void SampleAddAnimPart::Execute(const CState& state, CEvaluationContext& context) const
 {
+	DEFINE_PROFILER_FUNCTION();
 
-	assert(m_TargetBuffer <= Command::TargetBuffer);
+	CRY_ASSERT(m_TargetBuffer <= Command::TargetBuffer);
 	const auto parrRelPoseDst = static_cast<QuatT*>(context.m_buffers[m_TargetBuffer + 0]);
 	const auto parrScalingDst = static_cast<float*>(context.m_buffers[m_TargetBuffer + 3]);
 	const auto parrStatusDst = static_cast<JointState*>(context.m_buffers[m_TargetBuffer + 1]);
@@ -451,22 +500,22 @@ void SampleAddAnimPart::Execute(const CState& state, CEvaluationContext& context
 
 	const auto& rCAF = [&]() -> const GlobalAnimationHeaderCAF& // TODO: move outside
 	{
-		assert(m_nEAnimID >= 0);
+		CRY_ASSERT(m_nEAnimID >= 0);
 
 		const ModelAnimationHeader* pMAG = state.m_pDefaultSkeleton->m_pAnimationSet->GetModelAnimationHeader(m_nEAnimID);
-		assert(pMAG);
-		assert(pMAG->m_nAssetType == CAF_File);
-		assert(pMAG->m_nGlobalAnimId >= 0);
+		CRY_ASSERT(pMAG);
+		CRY_ASSERT(pMAG->m_nAssetType == CAF_File);
+		CRY_ASSERT(pMAG->m_nGlobalAnimId >= 0);
 
 		return g_AnimationManager.m_arrGlobalCAF[pMAG->m_nGlobalAnimId];
 	} ();
-	assert(rCAF.IsAssetLoaded());
+	CRY_ASSERT(rCAF.IsAssetLoaded());
 
 	PREFAST_SUPPRESS_WARNING(6255)
 	const auto parrController = static_cast<IController**>(alloca(state.m_jointCount * sizeof(IController*)));
-	LoadControllers(rCAF, state, parrController);
+	GatherControllers(rCAF, state, parrController);
 
-	assert(m_fAnimTime >= 0.0f && m_fAnimTime <= 1.0f);
+	CRY_ASSERT(m_fAnimTime >= 0.0f && m_fAnimTime <= 1.0f);
 	const f32 fKeyTimeNew = rCAF.NTime2KTime(m_fAnimTime);
 
 	if (rCAF.IsAssetAdditive())
@@ -548,20 +597,17 @@ void SampleAddAnimPart::Execute(const CState& state, CEvaluationContext& context
 		{
 			if (parrStatusDst[j] & eJS_Orientation)
 			{
-				const Quat rot = parrRelPoseDst[j].q;
-				assert(parrRelPoseDst[j].q.IsValid());
+				CRY_ASSERT(parrRelPoseDst[j].q.IsValid());
 				o++;
 			}
 			if (parrStatusDst[j] & eJS_Position)
 			{
-				const Vec3 pos = parrRelPoseDst[j].t;
-				assert(parrRelPoseDst[j].t.IsValid());
+				CRY_ASSERT(parrRelPoseDst[j].t.IsValid());
 				p++;
 			}
 			if (parrStatusDst[j] & eJS_Scale)
 			{
-				const float scl = parrScalingDst[j];
-				assert(NumberValid(parrScalingDst[j]));
+				CRY_ASSERT(NumberValid(parrScalingDst[j]));
 				s++;
 			}
 		}
@@ -572,7 +618,9 @@ void SampleAddAnimPart::Execute(const CState& state, CEvaluationContext& context
 
 void PerJointBlending::Execute(const CState& state, CEvaluationContext& context) const
 {
-	assert(m_TargetBuffer <= Command::TargetBuffer);
+	DEFINE_PROFILER_FUNCTION();
+
+	CRY_ASSERT(m_TargetBuffer <= Command::TargetBuffer);
 
 	// This is source-buffer No.1
 	const auto parrRelPoseLayer = static_cast<QuatT*>(context.m_buffers[m_SourceBuffer + 0]);
@@ -630,8 +678,9 @@ void PerJointBlending::Execute(const CState& state, CEvaluationContext& context)
 
 void PoseModifier::Execute(const CState& state, CEvaluationContext& context) const
 {
+	DEFINE_PROFILER_FUNCTION();
+
 	const PoseModifier& ac = *this;
-	void** CBTemp = context.m_buffers;
 
 	SAnimationPoseModifierParams params;
 	params.pCharacterInstance = state.m_pInstance;
@@ -643,10 +692,10 @@ void PoseModifier::Execute(const CState& state, CEvaluationContext& context) con
 	   #ifdef _DEBUG
 	   for (uint32 j=0; j<params.jointCount; j++)
 	   {
-	    assert( params.pPoseRelative[j].q.IsUnit() );
-	    assert( params.pPoseAbsolute[j].q.IsUnit() );
-	    assert( params.pPoseRelative[j].IsValid() );
-	    assert( params.pPoseAbsolute[j].IsValid() );
+	    CRY_ASSERT( params.pPoseRelative[j].q.IsUnit() );
+	    CRY_ASSERT( params.pPoseAbsolute[j].q.IsUnit() );
+	    CRY_ASSERT( params.pPoseRelative[j].IsValid() );
+	    CRY_ASSERT( params.pPoseAbsolute[j].IsValid() );
 	   }
 	   #endif
 	 */
@@ -654,26 +703,36 @@ void PoseModifier::Execute(const CState& state, CEvaluationContext& context) con
 
 void UpdateRedirectedJoint::Execute(const CState& state, CEvaluationContext& context) const
 {
+	DEFINE_PROFILER_FUNCTION();
+
 	m_attachmentBone->Update_Redirected(*state.m_pPoseData);
 }
 
 void UpdatePendulumRow::Execute(const CState& state, CEvaluationContext& context) const
 {
+	DEFINE_PROFILER_FUNCTION();
+
 	m_attachmentPendulumRow->UpdateRow(*state.m_pPoseData);
 }
 
 void PrepareAllRedirectedTransformations::Execute(const CState& state, CEvaluationContext& context) const
 {
+	DEFINE_PROFILER_FUNCTION();
+
 	state.m_pInstance->m_AttachmentManager.PrepareAllRedirectedTransformations(*state.m_pPoseData);
 }
 
 void GenerateProxyModelRelativeTransformations::Execute(const CState& state, CEvaluationContext& context) const
 {
+	DEFINE_PROFILER_FUNCTION();
+
 	state.m_pInstance->m_AttachmentManager.GenerateProxyModelRelativeTransformations(*state.m_pPoseData);
 }
 
 void ComputeAbsolutePose::Execute(const CState& state, CEvaluationContext& context) const
 {
+	DEFINE_PROFILER_FUNCTION();
+
 	state.m_pPoseData->ValidateRelative(*state.m_pInstance->m_pDefaultSkeleton);
 	state.m_pPoseData->ComputeAbsolutePose(*state.m_pInstance->m_pDefaultSkeleton, state.m_pDefaultSkeleton->m_ObjectType == CHR);
 	state.m_pPoseData->ValidateAbsolute(*state.m_pInstance->m_pDefaultSkeleton);
@@ -687,7 +746,9 @@ void ProcessAnimationDrivenIkFunction(CCharInstance& instance, IAnimationPoseDat
 	if (!pPoseData)
 		return;
 
+#if defined(USE_CRY_ASSERT)
 	int jointCount = int(pPoseData->GetJointCount());
+#endif
 
 	const CDefaultSkeleton& modelSkeleton = *instance.m_pDefaultSkeleton;
 
@@ -700,12 +761,12 @@ void ProcessAnimationDrivenIkFunction(CCharInstance& instance, IAnimationPoseDat
 		LimbIKDefinitionHandle nHandle = modelSkeleton.m_ADIKTargets[i].m_nHandle;
 
 		int targetJointIndex = modelSkeleton.m_ADIKTargets[i].m_idxTarget;
-		assert(targetJointIndex < (int)jointCount);
+		CRY_ASSERT(targetJointIndex < (int)jointCount);
 		if (targetJointIndex < 0)
 			continue;
 
 		int targetWeightJointIndex = modelSkeleton.m_ADIKTargets[i].m_idxWeight;
-		assert(targetWeightJointIndex < (int)jointCount);
+		CRY_ASSERT(targetWeightJointIndex < (int)jointCount);
 		if (targetWeightJointIndex < 0)
 			continue;
 
@@ -812,6 +873,8 @@ void ProcessAnimationDrivenIkFunction(CCharInstance& instance, IAnimationPoseDat
 
 void ProcessAnimationDrivenIk::Execute(const CState& state, CEvaluationContext& context) const
 {
+	DEFINE_PROFILER_FUNCTION();
+
 	if (!state.m_pInstance->m_SkeletonPose.m_physics.m_bPhysicsRelinquished && state.m_pInstance->m_SkeletonAnim.m_IsAnimPlaying && Console::GetInst().ca_useADIKTargets)
 	{
 		ProcessAnimationDrivenIkFunction(*state.m_pInstance, state.m_pPoseData, state.m_location);
@@ -820,6 +883,8 @@ void ProcessAnimationDrivenIk::Execute(const CState& state, CEvaluationContext& 
 
 void PhysicsSync::Execute(const CState& state, CEvaluationContext& context) const
 {
+	DEFINE_PROFILER_FUNCTION();
+
 	state.m_pInstance->m_SkeletonPose.m_physics.Job_Physics_SynchronizeFrom(*state.m_pPoseData, state.m_originalTimeDelta);
 }
 
@@ -829,15 +894,13 @@ void VerifyFull::Execute(const CState& state, CEvaluationContext& context) const
 	const VerifyFull& ac = *this;
 	void** CBTemp = context.m_buffers;
 
-	assert(ac.m_TargetBuffer <= Command::TargetBuffer);
+	CRY_ASSERT(ac.m_TargetBuffer <= Command::TargetBuffer);
 	QuatT* parrRelPoseDst = (QuatT*)    CBTemp[ac.m_TargetBuffer + 0];
-	JointState* parrStatusDst = (JointState*)  CBTemp[ac.m_TargetBuffer + 1];
 	uint32 numJoints = state.m_jointCount;
 	for (uint32 j = 0; j < numJoints; j++)
 	{
-		JointState s4 = parrStatusDst[j];
-		assert(parrRelPoseDst[j].q.IsValid());
-		assert(parrRelPoseDst[j].t.IsValid());
+		CRY_ASSERT(parrRelPoseDst[j].q.IsValid());
+		CRY_ASSERT(parrRelPoseDst[j].t.IsValid());
 	}
 }
 #endif

@@ -1,11 +1,10 @@
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
+
+#pragma once
+
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // A wrapper around Scaleform's GRenderer interface to delegate all rendering to CryEngine's IRenderer interface
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-#ifndef _GRENDERER_XRENDER_H_
-#define _GRENDERER_XRENDER_H_
-
-#pragma once
 
 #ifdef INCLUDE_SCALEFORM_SDK
 
@@ -18,13 +17,14 @@
 #pragma warning(pop)
 
 #include <vector>
+#include <stack>
 #include <CrySystem/Scaleform/GMemorySTLAlloc.h>
 #include "GTexture_Impl.h"
 
 #define ENABLE_FLASH_FILTERS
 
-class ITexture;
 class GTextureXRender;
+struct ITexture;
 struct GRendererCommandBuffer;
 
 class CCachedDataStore;
@@ -294,6 +294,7 @@ public:
 	virtual IScaleformPlayback* GetPlayback() const override { return m_pPlayback; }
 
 	// IFlashPlayer
+	virtual void SetClearFlags(uint32 clearFlags, ColorF clearColor) override;
 	virtual void SetCompositingDepth(float depth) override;
 
 	virtual void SetStereoMode(bool stereo, bool isLeft) override;
@@ -366,8 +367,8 @@ public:
 private:
 	CCachedDataStore(GRenderer::CachedDataType type, IScaleformPlayback* pOwner, const IScaleformPlayback::DeviceData* pData)
 		: CCachedData(pData)
-		, m_Owner(pOwner)
 		, m_type(type)
+		, m_Owner(pOwner)
 	{
 		CryInterlockedIncrement(&ms_numInst);
 	}
@@ -390,5 +391,3 @@ private:
 };
 
 #endif // #ifdef INCLUDE_SCALEFORM_SDK
-
-#endif // #ifndef _GRENDERER_XRENDER_H_

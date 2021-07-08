@@ -4,6 +4,7 @@
 
 #include <CrySystem/UserAnalytics/IUserAnalytics.h>
 #include <CrySystem/ISystem.h>
+#include <CryThreading/MultiThread_Containers.h>
 
 #if !defined(_RELEASE) && CRY_PLATFORM_WINDOWS
 
@@ -36,6 +37,7 @@ private:
 	void    Shutdown();
 
 	void    ReadWriteAnonymousToken();
+	void    ReadUserIdFromDisk();
 	void    PrepareAndSendEvents();
 
 	CryMT::vector<string>     m_messages; // message buffer
@@ -50,6 +52,7 @@ private:
 	static ICVar*             m_userAnalyticsServerAddress;
 
 	string                    m_anonymousUserToken;
+	string                    m_userId;
 };
 #else
 class CUserAnalytics : public IUserAnalytics

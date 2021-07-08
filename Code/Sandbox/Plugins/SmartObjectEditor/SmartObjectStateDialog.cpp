@@ -1,10 +1,10 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "ItemDescriptionDlg.h"
 #include "SmartObjectsEditorDialog.h"
 #include "SmartObjectStateDialog.h"
-#include "AI\AIManager.h"
+#include "AI/AIManager.h"
 #include "Controls/QuestionDialog.h"
 #include "Util/MFCUtil.h"
 
@@ -56,10 +56,8 @@ HTREEITEM CSmartObjectStateDialog::ForcePath(const CString& location)
 
 void CSmartObjectStateDialog::RemoveItemAndDummyParents(HTREEITEM item)
 {
-	assert(item && !m_TreeCtrl.ItemHasChildren(item));
-
-	unsigned count = m_mapStringToItem.erase(m_TreeCtrl.GetItemText(item));
-	assert(count == 1);
+	CRY_ASSERT(item && !m_TreeCtrl.ItemHasChildren(item));
+	CRY_VERIFY(m_mapStringToItem.erase(m_TreeCtrl.GetItemText(item)) == 1);
 
 	while (item && !m_TreeCtrl.ItemHasChildren(item))
 	{

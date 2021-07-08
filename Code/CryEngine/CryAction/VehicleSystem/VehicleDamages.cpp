@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
    -------------------------------------------------------------------------
@@ -75,7 +75,7 @@ void CVehicleDamages::InitDamages(CVehicle* pVehicle, const CVehicleParams& tabl
 		damagesTable.getAttr("playerKillAISpeed", m_damageParams.playerKillAISpeed);
 		damagesTable.getAttr("aiKillAISpeed", m_damageParams.aiKillAISpeed);
 
-		assert(m_pVehicle->GetEntity());
+		CRY_ASSERT(m_pVehicle->GetEntity());
 		ParseDamageMultipliers(m_damageMultipliersByHitType, m_damageMultipliersByProjectile, damagesTable, *m_pVehicle->GetEntity());
 	}
 }
@@ -91,7 +91,7 @@ void CVehicleDamages::ParseDamageMultipliers(TDamageMultipliers& multipliersByHi
 	int c = damageMultipliersTable.getChildCount();
 
 	IGameRules* pGR = CCryAction::GetCryAction()->GetIGameRulesSystem()->GetCurrentGameRules();
-	assert(pGR);
+	CRY_ASSERT(pGR);
 
 	for (; i < c; i++)
 	{
@@ -117,7 +117,6 @@ void CVehicleDamages::ParseDamageMultipliers(TDamageMultipliers& multipliersByHi
 			string ammoType = multiplierTable.getAttr("ammoType");
 			if (!ammoType.empty())
 			{
-				int projectileType = 0;
 				if (pGR && ammoType != "default")
 				{
 					uint16 classId(~uint16(0));
@@ -155,7 +154,7 @@ void CVehicleDamages::ResetDamages()
 //------------------------------------------------------------------------
 void CVehicleDamages::UpdateDamages(float frameTime)
 {
-	FUNCTION_PROFILER(GetISystem(), PROFILE_ACTION);
+	CRY_PROFILE_FUNCTION(PROFILE_ACTION);
 
 	for (TVehicleDamagesGroupVector::iterator ite = m_damagesGroups.begin(), end = m_damagesGroups.end(); ite != end; ++ite)
 	{

@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
    -------------------------------------------------------------------------
@@ -45,11 +45,7 @@ public:
 		filename = "[unknown]";
 		line = 0;
 		baseAddr = addr;
-#if CRY_PLATFORM_64BIT
 		procName.Format("[%016llX]", (uint64) addr);
-#else
-		procName.Format("[%08X]", (uint32) addr);
-#endif
 		return false;
 	}
 

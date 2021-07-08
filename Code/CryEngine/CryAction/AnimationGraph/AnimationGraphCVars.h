@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
    -------------------------------------------------------------------------
@@ -69,7 +69,7 @@ struct CAnimationGraphCVars
 
 	static inline CAnimationGraphCVars& Get()
 	{
-		assert(s_pThis != 0);
+		CRY_ASSERT(s_pThis != 0);
 		return *s_pThis;
 	}
 

@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 // -------------------------------------------------------------------------
 //  File name:   FlashUIDisplayNodes.cpp
@@ -10,6 +10,7 @@
 //
 ////////////////////////////////////////////////////////////////////////////
 #include "StdAfx.h"
+#include <CryPhysics/IPhysics.h>
 #include "FlashUIDisplayNodes.h"
 #include "FlashUI.h"
 
@@ -747,7 +748,6 @@ public:
 		case eFE_Initialize:
 			break;
 		case eFE_Activate:
-			IGameFramework* pGameFramework = gEnv->pGameFramework;
 
 			if (IsPortActive(pActInfo, EIP_Cast))
 			{
@@ -799,11 +799,11 @@ public:
 								Vec3 hitpos;
 
 								// calculate ray dir
-								CCamera cam = gEnv->pRenderer->GetCamera();
+								CCamera cam = GetISystem()->GetViewCamera();
 								if (pEntity->GetSlotFlags(m_dynTexGeomSlot) & ENTITY_SLOT_RENDER_NEAREST)
 								{
 									ICVar* r_drawnearfov = gEnv->pConsole->GetCVar("r_DrawNearFoV");
-									assert(r_drawnearfov);
+									CRY_ASSERT(r_drawnearfov);
 									cam.SetFrustum(cam.GetViewSurfaceX(), cam.GetViewSurfaceZ(), DEG2RAD(r_drawnearfov->GetFVal()), cam.GetNearPlane(), cam.GetFarPlane(), cam.GetPixelAspectRatio());
 								}
 

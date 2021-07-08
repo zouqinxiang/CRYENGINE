@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "PropertyCtrlEx.h"
@@ -827,7 +827,6 @@ void CPropertyCtrlEx::ReloadItems()
 
 	CRect rc;
 	GetClientRect(rc);
-	int nHeight = rc.Height();
 	int h = 0;
 
 	m_rollupCtrl.SetRedraw(FALSE);
@@ -917,7 +916,7 @@ CRollupCtrl* CPropertyCtrlEx::GetRollupCtrl(CPropertyItem* pItem)
 		else
 			return &m_rollupCtrl;
 	}
-	RC_PAGEINFO* pi = 0;
+
 	if (pItem->m_nCategoryPageId < SECOND_ROLLUP_BASEID)
 	{
 		return &m_rollupCtrl;

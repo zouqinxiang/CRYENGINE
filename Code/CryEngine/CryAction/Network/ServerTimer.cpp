@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "ServerTimer.h"
@@ -110,7 +110,7 @@ void CServerTimer::Serialize(TSerialize ser)
 
 bool CServerTimer::PauseTimer(ETimer /* which */, bool /*bPause*/)
 {
-	assert(false);
+	CRY_ASSERT(false);
 	return false;
 }
 

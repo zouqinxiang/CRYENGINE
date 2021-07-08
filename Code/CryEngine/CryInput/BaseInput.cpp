@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
    -------------------------------------------------------------------------
@@ -35,18 +35,20 @@ bool compareInputListener(const IInputEventListener* pListenerA, const IInputEve
 }
 
 CBaseInput::CBaseInput()
-	: m_pExclusiveListener(0)
+	: m_listeners(0)
+	, m_consoleListeners(0)
+	, m_pExclusiveListener(0)
+	, m_touchListeners(1)
 	, m_enableEventPosting(true)
 	, m_retriggering(false)
 	, m_hasFocus(false)
+	, m_forceFeedbackDeviceIndex(EFF_INVALID_DEVICE_INDEX)
 	, m_modifiers(0)
 	, m_pCVars(new CInputCVars())
-	, m_platformFlags(0)
-	, m_forceFeedbackDeviceIndex(EFF_INVALID_DEVICE_INDEX)
 	, m_pKinectInput(0)
 	, m_pEyeTrackerInput(0)
 	, m_pNaturalPointInput(0)
-	, m_touchListeners(1)
+	, m_platformFlags(0)
 {
 	GetISystem()->GetISystemEventDispatcher()->RegisterListener(this, "CBaseInput");
 
@@ -109,11 +111,11 @@ void CBaseInput::PostInit()
 	}
 }
 
-void CBaseInput::Update(bool bFocus)
+void CBaseInput::Update(bool bHasFocus)
 {
-	FUNCTION_PROFILER(GetISystem(), PROFILE_INPUT);
+	CRY_PROFILE_FUNCTION(PROFILE_INPUT);
 
-	m_hasFocus = bFocus;
+	m_hasFocus = bHasFocus;
 
 	// Update blocking inputs
 	UpdateBlockingInputs();
@@ -123,7 +125,7 @@ void CBaseInput::Update(bool bFocus)
 	for (TInputDevices::iterator i = m_inputDevices.begin(); i != m_inputDevices.end(); ++i)
 	{
 		if ((*i)->IsEnabled())
-			(*i)->Update(bFocus);
+			(*i)->Update(bHasFocus);
 	}
 
 	// send commit event after all input processing for this frame has finished
@@ -384,36 +386,23 @@ void CBaseInput::RetriggerKeyState()
 void CBaseInput::AddEventListener(IInputEventListener* pListener)
 {
 	// Add new listener to list if not added yet.
-	if (std::find(m_listeners.begin(), m_listeners.end(), pListener) == m_listeners.end())
-	{
-		m_listeners.push_back(pListener);
-		m_listeners.sort(compareInputListener);
-	}
+	m_listeners.Add(pListener);
 }
 
 void CBaseInput::RemoveEventListener(IInputEventListener* pListener)
 {
 	// Remove listener if it is in list.
-	TInputEventListeners::iterator it = std::find(m_listeners.begin(), m_listeners.end(), pListener);
-	if (it != m_listeners.end())
-	{
-		m_listeners.erase(it);
-	}
+	m_listeners.Remove(pListener);
 }
 
 void CBaseInput::AddConsoleEventListener(IInputEventListener* pListener)
 {
-	if (std::find(m_consoleListeners.begin(), m_consoleListeners.end(), pListener) == m_consoleListeners.end())
-	{
-		m_consoleListeners.push_back(pListener);
-		m_consoleListeners.sort(compareInputListener);
-	}
+	m_consoleListeners.Add(pListener);
 }
 
 void CBaseInput::RemoveConsoleEventListener(IInputEventListener* pListener)
 {
-	TInputEventListeners::iterator it = std::find(m_consoleListeners.begin(), m_consoleListeners.end(), pListener);
-	if (it != m_consoleListeners.end()) m_consoleListeners.erase(it);
+	m_consoleListeners.Remove(pListener);
 }
 
 void CBaseInput::SetExclusiveListener(IInputEventListener* pListener)
@@ -442,6 +431,20 @@ bool CBaseInput::AddInputDevice(IInputDevice* pDevice)
 	return false;
 }
 
+bool CBaseInput::RemoveInputDevice(IInputDevice* pDevice)
+{
+	for(auto it = m_inputDevices.begin(), end = m_inputDevices.end(); it != end; ++it)
+	{
+		if (*it == pDevice)
+		{
+			m_inputDevices.erase(it);
+			delete pDevice;
+			return true;
+		}
+	}
+	return false;
+}
+
 void CBaseInput::EnableEventPosting(bool bEnable)
 {
 	m_enableEventPosting = bEnable;
@@ -458,7 +461,7 @@ bool CBaseInput::IsEventPostingEnabled() const
 
 void CBaseInput::PostInputEvent(const SInputEvent& event, bool bForce)
 {
-	FUNCTION_PROFILER(GetISystem(), PROFILE_INPUT);
+	CRY_PROFILE_FUNCTION(PROFILE_INPUT);
 	//CryAutoCriticalSection postInputLock(m_postInputEventMutex);
 
 	if (!bForce && !m_enableEventPosting)
@@ -495,7 +498,7 @@ void CBaseInput::PostInputEvent(const SInputEvent& event, bool bForce)
 
 void CBaseInput::PostUnicodeEvent(const SUnicodeEvent& event, bool bForce)
 {
-	FUNCTION_PROFILER(GetISystem(), PROFILE_INPUT);
+	CRY_PROFILE_FUNCTION(PROFILE_INPUT);
 	assert(event.inputChar != 0 && Unicode::Validate(event.inputChar) && "Attempt to post invalid unicode event");
 
 	if (!bForce && !m_enableEventPosting)
@@ -517,9 +520,9 @@ void CBaseInput::PostUnicodeEvent(const SUnicodeEvent& event, bool bForce)
 bool CBaseInput::SendEventToListeners(const SInputEvent& event)
 {
 	// console listeners get to process the event first
-	for (TInputEventListeners::const_iterator it = m_consoleListeners.begin(); it != m_consoleListeners.end(); ++it)
+	for (TInputEventListeners::Notifier notifier(m_consoleListeners); notifier.IsValid(); notifier.Next())
 	{
-		bool ret = (*it)->OnInputEvent(event);
+		bool ret = notifier->OnInputEvent(event);
 		if (ret)
 			return false;
 	}
@@ -554,13 +557,9 @@ bool CBaseInput::SendEventToListeners(const SInputEvent& event)
 	if (!bInputBlocked)
 	{
 		// Send this event to all listeners until the first one returns true.
-		for (TInputEventListeners::const_iterator it = m_listeners.begin(); it != m_listeners.end(); ++it)
+		for (TInputEventListeners::Notifier notifier(m_listeners); notifier.IsValid(); notifier.Next())
 		{
-			assert(*it);
-			if (*it == NULL)
-				continue;
-
-			bool ret = (*it)->OnInputEvent(e);
+			bool ret = notifier->OnInputEvent(e);
 			if (ret) break;
 		}
 	}
@@ -571,9 +570,9 @@ bool CBaseInput::SendEventToListeners(const SInputEvent& event)
 bool CBaseInput::SendEventToListeners(const SUnicodeEvent& event)
 {
 	// console listeners get to process the event first
-	for (TInputEventListeners::const_iterator it = m_consoleListeners.begin(); it != m_consoleListeners.end(); ++it)
+	for (TInputEventListeners::Notifier notifier(m_consoleListeners); notifier.IsValid(); notifier.Next())
 	{
-		bool ret = (*it)->OnInputEventUI(event);
+		bool ret = notifier->OnInputEventUI(event);
 		if (ret)
 			return false;
 	}
@@ -588,13 +587,9 @@ bool CBaseInput::SendEventToListeners(const SUnicodeEvent& event)
 	}
 
 	// Send this event to all listeners until the first one returns true.
-	for (TInputEventListeners::const_iterator it = m_listeners.begin(); it != m_listeners.end(); ++it)
+	for (TInputEventListeners::Notifier notifier(m_listeners); notifier.IsValid(); notifier.Next())
 	{
-		assert(*it);
-		if (*it == NULL)
-			continue;
-
-		bool ret = (*it)->OnInputEventUI(event);
+		bool ret = notifier->OnInputEventUI(event);
 		if (ret) break;
 	}
 
@@ -713,7 +708,7 @@ void CBaseInput::UpdateBlockingInputs()
 
 void CBaseInput::PostHoldEvents()
 {
-	FUNCTION_PROFILER(GetISystem(), PROFILE_INPUT);
+	CRY_PROFILE_FUNCTION(PROFILE_INPUT);
 	SInputEvent event;
 
 	// DARIO_NOTE: In this loop, m_holdSymbols size and content is changed so previous

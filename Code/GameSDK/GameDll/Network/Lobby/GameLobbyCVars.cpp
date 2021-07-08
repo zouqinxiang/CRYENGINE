@@ -1,7 +1,8 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "GameLobbyCVars.h"
+#include <CrySystem/ConsoleRegistration.h>
 
 #define GAME_LOBBY_IGNORE_BAD_SERVERS_LIST 0
 

@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -6,13 +6,7 @@
 #include "CryString.h"
 #include "UnicodeFunctions.h"
 
-#ifndef NOT_USE_CRY_STRING
-#include <CryCore/Platform/CryWindows.h>
-#endif
-
-#if !defined(RESOURCE_COMPILER)
-	#include <CryCore/CryCrc32.h>
-#endif
+#include <CryCore/CryCrc32.h>
 
 #if CRY_PLATFORM_LINUX || CRY_PLATFORM_ANDROID || CRY_PLATFORM_APPLE
 	#include <ctype.h>
@@ -144,7 +138,7 @@ inline const char* strnstr(const char* szString, const char* szSubstring, int nS
 	if (!nSubstringLength)
 		return szString;
 
-	for (int nSubstringPos = 0; szString[nSubstringPos] && nSubstringPos < nSuperstringLength - nSubstringLength; ++nSubstringPos)
+	for (int nSubstringPos = 0; szString[nSubstringPos] && nSubstringPos <= nSuperstringLength - nSubstringLength; ++nSubstringPos)
 	{
 		if (strncmp(szString + nSubstringPos, szSubstring, nSubstringLength) == 0)
 			return szString + nSubstringPos;
@@ -169,8 +163,6 @@ inline bool MatchWildcardIgnoreCase(const char* szString, const char* szWildcard
 {
 	return CryStringUtils_Internal::MatchesWildcards_Tpl<CryStringUtils_Internal::SCharComparatorCaseInsensitive>(szString, szWildcard);
 }
-
-#if !defined(RESOURCE_COMPILER)
 
 //! Calculates a hash value for a given string.
 inline uint32 CalculateHash(const char* str)
@@ -233,7 +225,6 @@ inline uint32 HashStringLower(const char* string)
 {
 	return HashStringLowerSeed(string, CRY_DEFAULT_HASH_SEED);
 }
-#endif
 
 //! Converts all ASCII characters in a string to lower case - avoids memory allocation.
 //! This function is ASCII-only (Unicode remains unchanged) and uses the "C" locale for case conversion (A-Z only).
@@ -303,20 +294,6 @@ inline wstring UTF8ToWStrSafe(const char* szString)
 {
 	return Unicode::ConvertSafe<Unicode::eErrorRecovery_FallbackWin1252ThenReplace, wstring>(szString);
 }
-
-#ifdef CRY_PLATFORM_WINAPI
-//! Converts a string from the local Windows codepage to UTF-8.
-inline string ANSIToUTF8(const char* str)
-{
-	int wideLen = MultiByteToWideChar(CP_ACP, 0, str, -1, 0, 0);
-	wchar_t* unicode = (wchar_t*)malloc(wideLen * sizeof(wchar_t));
-	MultiByteToWideChar(CP_ACP, 0, str, -1, unicode, wideLen);
-	string utf = CryStringUtils::WStrToUTF8(unicode);
-	free(unicode);
-	return utf;
-}
-#endif
-
 
 #endif // NOT_USE_CRY_STRING
 
@@ -588,7 +565,7 @@ ILINE void portable_makepath(char* path, const char* drive, const char* dir, con
 
 	/* copy fname */
 
-	if (p = fname)
+	if ((p = fname))
 	{
 		while (*p)
 		{
@@ -600,13 +577,13 @@ ILINE void portable_makepath(char* path, const char* drive, const char* dir, con
 	 * to be inserted.
 	 */
 
-	if (p = ext)
+	if ((p = ext))
 	{
 		if (*p && *p != ('.'))
 		{
 			*path++ = ('.');
 		}
-		while (*path++ = *p++)
+		while ((*path++ = *p++))
 			;
 	}
 	else
@@ -885,7 +862,7 @@ void CProcessor<TPatternStringStorage >::ForEachWildCardResult(const CEvaluation
 {
 	const TConstraintMatches& matches = result.GetMatches();
 	const size_t count = matches.size();
-	CRY_ASSERT_MESSAGE(count == m_descriptor.constraintDescs.size(), "Descriptor and result are out of sync. Either the last Process call failed or the result structure has already been reused after it.");
+	CRY_ASSERT(count == m_descriptor.constraintDescs.size(), "Descriptor and result are out of sync. Either the last Process call failed or the result structure has already been reused after it.");
 	if (count == m_descriptor.constraintDescs.size())
 	{
 		for (size_t i = 0; i < count; ++i)

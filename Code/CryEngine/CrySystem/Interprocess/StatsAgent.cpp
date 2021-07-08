@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 
@@ -16,6 +16,7 @@
 	#include <CryThreading/MultiThread_Containers.h>
 
 	#include <CryThreading/IThreadManager.h>
+	#include <CrySystem/ConsoleRegistration.h>
 
 class CStatsAgentImpl
 {

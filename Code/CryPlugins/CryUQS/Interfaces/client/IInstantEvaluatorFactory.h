@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -44,6 +44,8 @@ namespace UQS
 
 			virtual                                 ~IInstantEvaluatorFactory() {}
 			virtual const char*                     GetName() const = 0;
+			virtual const CryGUID&                  GetGUID() const = 0;
+			virtual const char*                     GetDescription() const = 0;
 			virtual const IInputParameterRegistry&  GetInputParameterRegistry() const = 0;
 			virtual InstantEvaluatorUniquePtr       CreateInstantEvaluator() = 0;
 			virtual void                            DestroyInstantEvaluator(IInstantEvaluator* pInstantEvaluatorToDestroy) = 0;
@@ -82,7 +84,7 @@ namespace UQS
 
 			inline void CInstantEvaluatorDeleter::operator()(IInstantEvaluator* pInstantEvaluatorToDelete)
 			{
-				assert(m_pInstantEvaluatorFactory);
+				CRY_ASSERT(m_pInstantEvaluatorFactory);
 				m_pInstantEvaluatorFactory->DestroyInstantEvaluator(pInstantEvaluatorToDelete);
 			}
 

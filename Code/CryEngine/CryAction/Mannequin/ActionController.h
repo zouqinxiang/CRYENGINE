@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 //
 ////////////////////////////////////////////////////////////////////////////
@@ -65,7 +65,7 @@ public:
 
 	virtual bool IsScopeActive(uint32 scopeID) const override
 	{
-		CRY_ASSERT_MESSAGE((scopeID < m_scopeCount), "Invalid scope id");
+		CRY_ASSERT((scopeID < m_scopeCount), "Invalid scope id");
 
 		return ((m_activeScopes & BIT64(scopeID)) != 0);
 	}

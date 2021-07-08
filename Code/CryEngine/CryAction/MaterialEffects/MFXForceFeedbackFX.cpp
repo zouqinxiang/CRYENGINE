@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 // -------------------------------------------------------------------------
 //  File name:   MFXForceFeedbackEffect.h
@@ -43,7 +43,7 @@ void CMFXForceFeedbackEffect::LoadParamsFromXml(const XmlNodeRef& paramsNode)
 
 void CMFXForceFeedbackEffect::Execute(const SMFXRunTimeEffectParams& params)
 {
-	FUNCTION_PROFILER(gEnv->pSystem, PROFILE_ACTION);
+	CRY_PROFILE_FUNCTION(PROFILE_ACTION);
 
 	float distanceToPlayerSqr = FLT_MAX;
 	IActor* pClientActor = gEnv->pGameFramework->GetClientActor();
@@ -60,7 +60,7 @@ void CMFXForceFeedbackEffect::Execute(const SMFXRunTimeEffectParams& params)
 	if (effectIntensity > 0.01f)
 	{
 		IForceFeedbackSystem* pForceFeedback = CCryAction::GetCryAction()->GetIForceFeedbackSystem();
-		assert(pForceFeedback);
+		CRY_ASSERT(pForceFeedback);
 		ForceFeedbackFxId fxId = pForceFeedback->GetEffectIdByName(m_forceFeedbackParams.forceFeedbackEventName.c_str());
 		pForceFeedback->PlayForceFeedbackEffect(fxId, SForceFeedbackRuntimeParams(effectIntensity, 0.0f));
 	}

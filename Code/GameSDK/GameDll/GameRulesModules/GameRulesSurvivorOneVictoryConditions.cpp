@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
 	-------------------------------------------------------------------------
@@ -343,7 +343,7 @@ void CGameRulesSurvivorOneVictoryConditions::SvSurvivorCountRefresh(int count, c
 	}
 
 	int  sz = (count * sizeof(survivors[0]));
-	CRY_ASSERT_MESSAGE(sz <= sizeof(m_svLatestSurvList), "Memory overwrite!");
+	CRY_ASSERT(sz <= sizeof(m_svLatestSurvList), "Memory overwrite!");
 	memcpy(m_svLatestSurvList, survivors, sz);
 	m_svLatestSurvCount = count;
 

@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #ifndef __HUDEVENTDISPATCHER_H__
 #define __HUDEVENTDISPATCHER_H__
@@ -449,7 +449,7 @@ public:
 
 	const SHUDEventData& GetData(uint8 index) const
 	{
-		CRY_ASSERT_MESSAGE(index < m_data->size(), "More SHUDEventData requested than provided!");
+		CRY_ASSERT(index < m_data->size(), "More SHUDEventData requested than provided!");
 		return (*m_data)[index];
 	}
 

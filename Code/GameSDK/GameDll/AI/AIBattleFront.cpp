@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "AIBattleFront.h"
@@ -95,7 +95,7 @@ void CAIBattleFrontGroup::CalculateAveragePositionOfGroupMembers()
 		if(!battleFrontMember.paused)
 		{
 			const IEntity* entity = gEnv->pEntitySystem->GetEntity(battleFrontMember.entityID);
-			CRY_ASSERT_MESSAGE(entity, "Somehow there is an invalid entity in a battlefront group");
+			CRY_ASSERT(entity, "Somehow there is an invalid entity in a battlefront group");
 			if (!entity)
 				break;
 

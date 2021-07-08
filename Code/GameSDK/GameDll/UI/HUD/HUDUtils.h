@@ -1,10 +1,11 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #ifndef __HUDUTILS_H__
 #define __HUDUTILS_H__
 
 #include "IViewSystem.h"
 #include "Actor.h"
+#include "Game.h"
 
 struct IHUDAsset;
 struct IFlashVariableObject;

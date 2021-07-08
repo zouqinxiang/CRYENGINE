@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 
@@ -8,6 +8,8 @@
 #include "world.h"
 
 #ifndef STANDALONE_PHYSICS
+#include "../../CryPhysics/cvars.h"
+#include <CryPhysics/IPhysics.h>
 #include <CrySystem/IEngineModule.h>
 #include <CryExtension/ICryFactory.h>
 #include <CryExtension/ClassWeaver.h>
@@ -28,6 +30,10 @@ public:
 		case ESYSTEM_EVENT_LEVEL_LOAD_END:
 			break;
 		case ESYSTEM_EVENT_3D_POST_RENDERING_END:
+			break;
+		case ESYSTEM_EVENT_FAST_SHUTDOWN:
+		case ESYSTEM_EVENT_FULL_SHUTDOWN:
+			cpx::g_cryPhysX.DisconnectPhysicsDebugger();
 			break;
 		}
 	}
@@ -59,7 +65,7 @@ class CEngineModule_CryPhysics : public IPhysicsEngineModule
 		CRYINTERFACE_ADD(IPhysicsEngineModule)
 	CRYINTERFACE_END()
 
-	CRYGENERATE_SINGLETONCLASS(CEngineModule_CryPhysics, "EngineModule_CryPhysics", 0x526cabf3d776407f, 0xaa2338545bb6ae7f)
+	CRYGENERATE_SINGLETONCLASS_GUID(CEngineModule_CryPhysics, "EngineModule_CryPhysics", "526cabf3-d776-407f-aa23-38545bb6ae7f"_cry_guid)
 
 		//////////////////////////////////////////////////////////////////////////
 		virtual const char *GetName() const override { return "CryPhysics"; };
@@ -74,6 +80,8 @@ class CEngineModule_CryPhysics : public IPhysicsEngineModule
 			pSystem->GetISystemEventDispatcher()->RegisterListener(&g_system_event_listener_physics, "CSystemEventListner_Physics");
 
 		env.pPhysicalWorld = new PhysXWorld(pSystem ? pSystem->GetILog() : 0);
+
+		PhysicsCVars::Register(env.pPhysicalWorld->GetPhysVars());
 
 		return true;
 	}

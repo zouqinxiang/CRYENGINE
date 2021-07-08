@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /********************************************************************
    -------------------------------------------------------------------------
@@ -25,6 +25,7 @@
 
 #include <CryAISystem/IAIActor.h>
 #include <CryAISystem/IAgent.h>
+#include <CryAISystem/ICollisionAvoidance.h>
 
 #include <CryAISystem/ValueHistory.h>
 #include <CryAISystem/INavigationSystem.h>
@@ -37,6 +38,29 @@ namespace BehaviorTree
 struct INode;
 class TimestampCollection;
 }
+
+// AI Actor Collision Avoidance agent
+class CActorCollisionAvoidance : public Cry::AI::CollisionAvoidance::IAgent
+{
+public:
+	CActorCollisionAvoidance(CAIActor* pActor);
+	virtual ~CActorCollisionAvoidance() override;
+
+	void Reset();
+	void Serialize(TSerialize ser);
+
+	virtual NavigationAgentTypeID GetNavigationTypeId() const override;
+	virtual const INavMeshQueryFilter* GetNavigationQueryFilter() const override;
+	virtual const char* GetDebugName() const override;
+
+	virtual Cry::AI::CollisionAvoidance::ETreatType GetTreatmentDuringUpdateTick(Cry::AI::CollisionAvoidance::SAgentParams& outAgent, Cry::AI::CollisionAvoidance::SObstacleParams& outObstacle) const override;
+
+	virtual void ApplyComputedVelocity(const Vec2& avoidanceVelocity, float updateTime) override;
+
+private:
+	CAIActor* m_pActor;
+	float m_radiusIncrement;
+};
 
 // Structure reflecting the physical entity parts.
 // When choosing the target location to hit, the AI chooses amongst one of these.
@@ -95,27 +119,12 @@ public:
 	virtual float                       GetPathAgentPassRadius() const override;
 	virtual Vec3                        GetPathAgentPos() const override;
 	virtual Vec3                        GetPathAgentVelocity() const override;
-	virtual void                        GetPathAgentNavigationBlockers(NavigationBlockers& navigationBlockers, const struct PathfindRequest* pRequest) override;
-
-	virtual size_t                      GetNavNodeIndex() const override;
 
 	virtual const AgentMovementAbility& GetPathAgentMovementAbility() const override;
 	virtual IPathFollower*              GetPathFollower() const override;
 
-	virtual unsigned int                GetPathAgentLastNavNode() const override;
-	virtual void                        SetPathAgentLastNavNode(unsigned int lastNavNode) override;
-
 	virtual void                        SetPathToFollow(const char* pathName) override;
 	virtual void                        SetPathAttributeToFollow(bool bSpline) override;
-
-	//Path finding avoids blocker type by radius.
-	virtual void SetPFBlockerRadius(int blockerType, float radius) override;
-
-	//Can path be modified to use request.targetPoint?  Results are cacheded in request.
-	virtual ETriState CanTargetPointBeReached(CTargetPointRequest& request) override;
-
-	//Is request still valid/use able
-	virtual bool UseTargetPointRequest(const CTargetPointRequest& request) override;//??
 
 	virtual bool GetValidPositionNearby(const Vec3& proposedPosition, Vec3& adjustedPosition) const override;
 	virtual bool GetTeleportPosition(Vec3& teleportPos) const override;
@@ -132,8 +141,8 @@ public:
 	virtual void                OnObjectRemoved(CAIObject* pObject) override;
 	virtual SOBJECTSTATE&       GetState(void) override       { return m_State; }
 	virtual const SOBJECTSTATE& GetState(void) const override { return m_State; }
-	virtual void                SetSignal(int nSignalID, const char* szText, IEntity* pSender = 0, IAISignalExtraData* pData = NULL, uint32 crcCode = 0) override;
-	virtual void                OnAIHandlerSentSignal(const char* szText, uint32 crcCode) override;
+	virtual void                SetSignal(const AISignals::SignalSharedPtr& pSignal) override;
+	virtual void                OnAIHandlerSentSignal(const AISignals::SignalSharedPtr& pSignal) override;
 	virtual void                Serialize(TSerialize ser) override;
 	virtual void                Update(EUpdateType type);
 	virtual void                UpdateProxy(EUpdateType type);
@@ -375,10 +384,10 @@ protected:
 	string              m_modularBehaviorTreeName;
 
 private:
+	CActorCollisionAvoidance m_collisionAvoidanceAgent;
+
 	float m_FOVPrimaryCos;
 	float m_FOVSecondaryCos;
-
-	float m_currentCollisionAvoidanceRadiusIncrement;
 
 	typedef VectorSet<tAIObjectID> PersonallyHostiles;
 	PersonallyHostiles    m_forcefullyHostiles;

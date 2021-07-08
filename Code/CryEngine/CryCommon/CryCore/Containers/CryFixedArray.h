@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
    -------------------------------------------------------------------------
@@ -38,10 +38,18 @@ struct CryFixedArrayDatum<8>
 	typedef uint64 TDatum;
 };
 
+#if CRY_PLATFORM_SSE2
+template<>
+struct CryFixedArrayDatum<16>
+{
+	typedef u32v4 TDatum;
+};
+#endif
+
 template<class T, unsigned int N> class CryFixedArray
 {
 protected:
-	enum { ALIGN = MAX(alignof(T), sizeof(unsigned int)) };   //!< ALIGN at least sizeof(unsigned int).
+	enum { ALIGN = (alignof(T) > sizeof(unsigned int)) ? alignof(T) : sizeof(unsigned int) };   //!< ALIGN at least sizeof(unsigned int).
 
 	typedef typename CryFixedArrayDatum<ALIGN>::TDatum TDatum;
 
@@ -62,7 +70,7 @@ public:
 			CryLogAlways("CryFixedArray() error - data is not aligned. This may happen if you are creating a CryFixedArray on the stack, which isn't supported.");
 		}
 #endif
-		CRY_ASSERT_MESSAGE(((uintptr_t)m_data & (ALIGN - 1)) == 0, "CryFixedArray() error - data is not aligned. This may happen if you are creating a CryFixedArray on the stack, which isn't supported.");
+		CRY_ASSERT(((uintptr_t)m_data & (ALIGN - 1)) == 0, "CryFixedArray() error - data is not aligned. This may happen if you are creating a CryFixedArray on the stack, which isn't supported.");
 		m_curSize[0] = 0;
 	}
 
@@ -115,11 +123,8 @@ public:
 		}
 		else
 		{
-			// Log is required now as its possible to turn off assert output logging, yet you really want to know if this is happening!.
-			CryLogAlways("CryFixedArray::at(i=%d) failed as i is out of range of curSize=%d (maxSize=%d) - forcing a crash", i, m_curSize[0], N);
-			CRY_ASSERT_MESSAGE(0, string().Format("CryFixedArray::at(i=%d) failed as i is out of range of curSize=%d (maxSize=%d)", i, m_curSize[0], N));
-			// cppcheck-suppress nullPointer.
-			return *((T*)(NULL));   // Crash on using me.
+			CryFatalError("CryFixedArray::at(i=%d) failed as i is out of range of curSize=%d (maxSize=%d) - forcing a crash", i, m_curSize[0], N);
+			UNREACHABLE();
 		}
 #else
 		return alias_cast<T*>(m_data)[i];
@@ -135,10 +140,8 @@ public:
 		}
 		else
 		{
-			// Log is required now as its possible to turn off assert output logging, yet you really want to know if this is happening!.
-			CryLogAlways("CryFixedArray::at(i=%d) failed as i is out of range of curSize=%d (maxSize=%d) - forcing a crash", i, m_curSize[0], N);
-			CRY_ASSERT_MESSAGE(0, string().Format("CryFixedArray::at(i=%d) failed as i is out of range of curSize=%d (maxSize=%d)", i, m_curSize[0], N));
-			return *((const T*)(NULL));   // Crash on using me.
+			CryFatalError("CryFixedArray::at(i=%d) failed as i is out of range of curSize=%d (maxSize=%d) - forcing a crash", i, m_curSize[0], N);
+			UNREACHABLE();
 		}
 #else
 		return alias_cast<const T*>(m_data)[i];
@@ -159,8 +162,7 @@ public:
 	{
 		for (uint32 i = 0; i < m_curSize[0]; i++)
 		{
-			T& ele = operator[](i);
-			ele.~T();
+			operator[](i).~T();
 		}
 		m_curSize[0] = 0;
 #ifdef DEBUG_CRYFIXED_ARRAY
@@ -204,7 +206,7 @@ public:
 		else
 		{
 			CryLogAlways("CryFixedArray::push_back() failing as array of size %u is full - NOT adding element", N);
-			CRY_ASSERT_TRACE(0, ("CryFixedArray::push_back() failing as array of size %u is full - NOT adding element", N));
+			CRY_ASSERT(0, "CryFixedArray::push_back() failing as array of size %u is full - NOT adding element", N);
 		}
 	}
 
@@ -221,7 +223,7 @@ public:
 		else
 		{
 			CryLogAlways("CryFixedArray::push_back() failing as array of size %u is full - NOT adding element", N);
-			CRY_ASSERT_TRACE(0, ("CryFixedArray::push_back() failing as array of size %u is full - NOT adding element", N));
+			CRY_ASSERT(0, "CryFixedArray::push_back() failing as array of size %u is full - NOT adding element", N);
 		}
 	}
 
@@ -235,7 +237,7 @@ public:
 		else
 		{
 			CryLogAlways("CryFixedArray::pop_back() failed as array is empty");
-			CRY_ASSERT_MESSAGE(0, "CryFixedArray::pop_back() failed as array is empty");
+			CRY_ASSERT(0, "CryFixedArray::pop_back() failed as array is empty");
 		}
 	}
 
@@ -249,9 +251,8 @@ protected:
 		}
 		else
 		{
-			CryLogAlways("CryFixedArray::back() failed as array is empty");
-			CRY_ASSERT_MESSAGE(0, "CryFixedArray::back() failed as array is empty");
-			return *((T*)(NULL));   //!< Crash on using me.
+			CryFatalError("CryFixedArray::back() failed as array is empty");
+			UNREACHABLE();
 		}
 #else
 		return (alias_cast<T*>(m_data))[m_curSize[0] - 1];
@@ -291,7 +292,7 @@ public:
 		else
 		{
 			CryLog("CryFixedArray::removeAt() failed as i=%d is out of range of curSize=%d", i, m_curSize[0]);
-			CRY_ASSERT_MESSAGE(0, string().Format("CryFixedArray::removeAt() failed as i=%d is out of range of curSize=%d", i, m_curSize[0]));
+			CRY_ASSERT(0, string().Format("CryFixedArray::removeAt() failed as i=%d is out of range of curSize=%d", i, m_curSize[0]));
 		}
 		return swappedElement;
 	}

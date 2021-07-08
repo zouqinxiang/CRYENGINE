@@ -1,8 +1,9 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
 #include "VertexData.h"
+#include <CryRenderer/IShader.h>
 
 struct VertexCommand;
 
@@ -119,7 +120,6 @@ public:
 	uint                                             transformationCount;
 
 	strided_pointer<const Vec3>                      pVertexPositions;
-	strided_pointer<const Vec3>                      pVertexPositionsPrevious;
 	strided_pointer<const Quat>                      pVertexQTangents;
 	strided_pointer<const SoftwareVertexBlendIndex>  pVertexTransformIndices;
 	strided_pointer<const SoftwareVertexBlendWeight> pVertexTransformWeights;

@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -7,9 +7,7 @@
 class CSchematycPlugin : public IPlugin
 {
 public:
-
 	CSchematycPlugin();
-	~CSchematycPlugin();
 
 	// IPlugin
 	int32       GetPluginVersion() override;

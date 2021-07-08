@@ -1,9 +1,11 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
+
 #pragma once
 
 #include <CryNetwork/INetwork.h>
 #include <CryEntitySystem/IEntityComponent.h>
 #include <CryMemory/PoolAllocator.h>
+#include <CryGame/IGameFramework.h>
 
 template<size_t N>
 stl::PoolAllocator<N>& GetRMIAllocator()
@@ -12,6 +14,7 @@ stl::PoolAllocator<N>& GetRMIAllocator()
 	return allocator;
 }
 
+// \cond INTERNAL
 namespace CryRmi {
 
 template<class User, class Param>
@@ -29,7 +32,7 @@ public:
 		User *pUser = pEntity ? pEntity->GetComponent<User>() : nullptr;
 		bool ok = pUser ? (pUser->*m_fn)(std::move(m_params), m_pChannel) : false;
 
-		CRY_ASSERT_MESSAGE(pEntity && pUser && ok, "RMI remote at sync: failed with"
+		CRY_ASSERT(pEntity && pUser && ok, "RMI remote at sync: failed with"
 			" entity id %d. pEntity:%x, pUser:%x (guid:%x), ok:%d", m_id, pEntity,
 			pUser, cryiidof<User>().hipart, ok);
 		return ok;
@@ -114,6 +117,7 @@ private:
 };
 
 } // namespace
+//! \endcond
 
 // -----------------------------------------------------------------------------
 template<class F, F>
@@ -122,6 +126,8 @@ struct SRmi;
 //! This is an intermediate class for RMI support in game components.
 //! It allows the game code to register remote invocations while preserving
 //! the type safety of the callback.
+//! \par Example
+//! \include CryEntitySystem/Examples/ComponentRemoteMethodInvocation.cpp
 template <class User, class Param, CryRmi::RmiCallback<User, Param> fn>
 struct SRmi<CryRmi::RmiCallback<User, Param>, fn>
 {
@@ -142,14 +148,52 @@ struct SRmi<CryRmi::RmiCallback<User, Param>, fn>
 			INetEntity::SRmiHandler{ Decoder, reliability, attach });
 	}
 
+protected:
 	static void Invoke(User *this_user, Param &&p, int where, int channel = -1, const EntityId dependentId = 0)
 	{
 		INetEntity::SRmiHandler *handler = nullptr;
 		INetEntity::SRmiIndex idx = this_user->GetEntity()->GetNetEntity()->RmiByDecoder(
 			Decoder, &handler);
 		gEnv->pGameFramework->DoInvokeRMI(CryRmi::CeRMIBody<Param>::Create(
-				*handler, idx, this_user->GetEntityId(), p, 0, 0, dependentId),
-			where, channel, false);
+			*handler, idx, this_user->GetEntityId(), p, 0, 0, dependentId),
+		where, channel, false);
+	}
+
+public:
+	static inline void InvokeOnRemoteClients(User *this_user, Param&& p, const EntityId dependentId = 0)
+	{
+		CRY_ASSERT(gEnv->bServer);
+
+		Invoke(this_user, std::forward<Param>(p), eRMI_ToRemoteClients, -1, dependentId);
+	}
+
+	static inline void InvokeOnClient(User *this_user, Param&& p, int targetClientChannelId, const EntityId dependentId = 0)
+	{
+		CRY_ASSERT(gEnv->bServer);
+
+		Invoke(this_user, std::forward<Param>(p), eRMI_ToClientChannel, targetClientChannelId, dependentId);
+	}
+
+	static inline void InvokeOnOtherClients(User *this_user, Param&& p, const EntityId dependentId = 0)
+	{
+		Invoke(this_user, std::forward<Param>(p), eRMI_ToOtherClients, -1, dependentId);
+	}
+
+	static inline void InvokeOnAllClients(User *this_user, Param&& p, const EntityId dependentId = 0)
+	{
+		CRY_ASSERT(gEnv->bServer);
+
+		Invoke(this_user, std::forward<Param>(p), eRMI_ToAllClients, -1, dependentId);
+	}
+
+	static inline void InvokeOnServer(User *this_user, Param&& p, const EntityId dependentId = 0)
+	{
+		Invoke(this_user, std::forward<Param>(p), eRMI_ToServer, -1, dependentId);
+	}
+
+	static inline void InvokeOnOwnClient(User *this_user, Param&& p, const EntityId dependentId = 0)
+	{
+		Invoke(this_user, std::forward<Param>(p), eRMI_ToOwnClient, -1, dependentId);
 	}
 };
 

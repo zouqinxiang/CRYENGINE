@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #ifndef __SERIALIZE_BITS__H__
 #define __SERIALIZE_BITS__H__
@@ -108,12 +108,12 @@ NO_INLINE_WEAK void CBitArray::PushBit(int bit)
 		m_multiplier = 1;
 		m_bitPos = 0;
 		m_bytePos++;
-		assert(m_bytePos < maxBytes);
+		CRY_ASSERT(m_bytePos < maxBytes);
 		PREFAST_ASSUME(m_bytePos < maxBytes);
 		m_data[m_bytePos] = 0;
 		m_numberBytes++;
 	}
-	assert((unsigned int)m_bytePos < (unsigned int)maxBytes);
+	CRY_ASSERT((unsigned int)m_bytePos < (unsigned int)maxBytes);
 	PREFAST_ASSUME((unsigned int)m_bytePos < (unsigned int)maxBytes);
 	m_data[m_bytePos] |= m_multiplier * (bit & 1);  // Use multiplier because variable bit shift on consoles is really slow
 	m_multiplier = m_multiplier << 1;

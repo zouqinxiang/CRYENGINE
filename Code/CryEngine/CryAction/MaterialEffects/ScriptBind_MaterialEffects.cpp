@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 // -------------------------------------------------------------------------
 //  File name:   ScriptBind_MaterialEffects.cpp
@@ -20,7 +20,7 @@ CScriptBind_MaterialEffects::CScriptBind_MaterialEffects(ISystem* pSystem, CMate
 {
 	m_pSystem = pSystem;
 	m_pMFX = pMFX;
-	assert(m_pMFX != 0);
+	CRY_ASSERT(m_pMFX != 0);
 
 	Init(gEnv->pScriptSystem, m_pSystem);
 	SetGlobalName("MaterialEffects");

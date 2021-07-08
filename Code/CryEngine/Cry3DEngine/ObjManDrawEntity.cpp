@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 // -------------------------------------------------------------------------
 //  File name:   statobjmandraw.cpp
@@ -26,31 +26,19 @@
 #include "DecalManager.h"
 #include "ObjectsTree.h"
 #include "Brush.h"
+#include "ClipVolumeManager.h"
 
-void CObjManager::RenderDecalAndRoad(IRenderNode* pEnt, PodArray<CDLight*>* pAffectingLights,
+void CObjManager::RenderDecalAndRoad(IRenderNode* pEnt,
                                      const Vec3& vAmbColor, const AABB& objBox,
                                      float fEntDistance,
-                                     bool bSunOnly, bool nCheckOcclusion,
+                                     bool nCheckOcclusion,
                                      const SRenderingPassInfo& passInfo)
 {
 	FUNCTION_PROFILER_3DENGINE;
 
-#ifdef _DEBUG
-	const char* szName = pEnt->GetName();
-	const char* szClassName = pEnt->GetEntityClassName();
-#endif // _DEBUG
-
-	// do not draw if marked to be not drawn or already drawn in this frame
-	auto nRndFlags = pEnt->GetRndFlags();
-
-	if (nRndFlags & ERF_HIDDEN)
-		return;
-
-	EERType eERType = pEnt->GetRenderNodeType();
-
 	// detect bad objects
 	float fEntLengthSquared = objBox.GetSize().GetLengthSquared();
-	if (eERType != eERType_Light || !_finite(fEntLengthSquared))
+	if (!_finite(fEntLengthSquared))
 	{
 		if (fEntLengthSquared > MAX_VALID_OBJECT_VOLUME || !_finite(fEntLengthSquared) || fEntLengthSquared <= 0)
 		{
@@ -60,18 +48,15 @@ void CObjManager::RenderDecalAndRoad(IRenderNode* pEnt, PodArray<CDLight*>* pAff
 			return; // skip invalid objects - usually only objects with invalid very big scale will reach this point
 		}
 	}
-	else
-		pAffectingLights = NULL;
 
 	// allocate RNTmpData for potentially visible objects
-	if (!Get3DEngine()->CheckAndCreateRenderNodeTempData(&pEnt->m_pTempData, pEnt, passInfo))
-	{
+	SRenderNodeTempData* pTempData = Get3DEngine()->CheckAndCreateRenderNodeTempData(pEnt, passInfo);
+	if (!pTempData)
 		return;
-	}
 
-	if (nCheckOcclusion && pEnt->m_pOcNode)
-		if (GetObjManager()->IsBoxOccluded(objBox, fEntDistance * passInfo.GetInverseZoomFactor(), &pEnt->m_pTempData->userData.m_OcclState,
-		                                   pEnt->m_pOcNode->m_pVisArea != NULL, eoot_OBJECT, passInfo))
+	if (nCheckOcclusion)
+		if (GetObjManager()->IsBoxOccluded(objBox, fEntDistance * passInfo.GetInverseZoomFactor(), &pTempData->userData.m_OcclState,
+		                                   pEnt->GetEntityVisArea() != nullptr, eoot_OBJECT, passInfo))
 			return;
 
 	CVisArea* pVisArea = (CVisArea*)pEnt->GetEntityVisArea();
@@ -80,23 +65,23 @@ void CObjManager::RenderDecalAndRoad(IRenderNode* pEnt, PodArray<CDLight*>* pAff
 
 	// test only near/big occluders - others will be tested on tree nodes level
 	if (!objBox.IsContainPoint(vCamPos))
-		if (eERType == eERType_Light || fEntDistance < pEnt->m_fWSMaxViewDist * GetCVars()->e_OcclusionCullingViewDistRatio)
-			if (IsBoxOccluded(objBox, fEntDistance * passInfo.GetInverseZoomFactor(), &pEnt->m_pTempData->userData.m_OcclState, pVisArea != NULL, eoot_OBJECT, passInfo))
+		if (fEntDistance < pEnt->m_fWSMaxViewDist * GetCVars()->e_OcclusionCullingViewDistRatio)
+			if (IsBoxOccluded(objBox, fEntDistance * passInfo.GetInverseZoomFactor(), &pTempData->userData.m_OcclState, pVisArea != NULL, eoot_OBJECT, passInfo))
 				return;
 
 	SRendParams DrawParams;
 	DrawParams.pTerrainTexInfo = NULL;
-	DrawParams.dwFObjFlags = 0;
+	DrawParams.dwFObjFlags = FOB_NONE;
 	DrawParams.fDistance = fEntDistance;
 	DrawParams.AmbientColor = vAmbColor;
 	DrawParams.pRenderNode = pEnt;
 	DrawParams.nAfterWater = IsAfterWater(objBox.GetCenter(), vCamPos, passInfo) ? 1 : 0;
 
 	// draw bbox
-	if (GetCVars()->e_BBoxes)// && eERType != eERType_Light)
-	{
+#if !defined(_RELEASE)
+	if (GetCVars()->e_BBoxes)
 		RenderObjectDebugInfo(pEnt, fEntDistance, passInfo);
-	}
+#endif
 
 	DrawParams.dwFObjFlags |= FOB_TRANS_MASK;
 
@@ -107,74 +92,77 @@ void CObjManager::RenderDecalAndRoad(IRenderNode* pEnt, PodArray<CDLight*>* pAff
 	pEnt->Render(DrawParams, passInfo);
 }
 
-void CObjManager::RenderVegetation(CVegetation* pEnt, PodArray<CDLight*>* pAffectingLights,
+void CObjManager::RenderVegetation(CVegetation* pEnt,
                                    const AABB& objBox,
                                    float fEntDistance,
-                                   bool bSunOnly, SSectorTextureSet* pTerrainTexInfo, bool nCheckOcclusion,
-                                   const SRenderingPassInfo& passInfo)
+                                   SSectorTextureSet* pTerrainTexInfo,
+                                   bool nCheckOcclusion,
+                                   const SRenderingPassInfo& passInfo,
+                                   FrustumMaskType passCullMask)
 {
 	FUNCTION_PROFILER_3DENGINE;
-
-#ifdef _DEBUG
-	const char* szName = pEnt->GetName();
-	const char* szClassName = pEnt->GetEntityClassName();
-#endif // _DEBUG
 
 	// check cvars
 	assert(passInfo.RenderVegetation());
 
 	// check-allocate RNTmpData for visible objects
-	if (!Get3DEngine()->CheckAndCreateRenderNodeTempData(&pEnt->m_pTempData, pEnt, passInfo))
-	{
+	SRenderNodeTempData* pTempData = Get3DEngine()->CheckAndCreateRenderNodeTempData(pEnt, passInfo);
+	if (!pTempData)
 		return;
+
+	if ((passCullMask & kPassCullMainMask) != 0 && nCheckOcclusion)
+	{
+		if (GetObjManager()->IsBoxOccluded(objBox, fEntDistance * passInfo.GetInverseZoomFactor(), &pTempData->userData.m_OcclState, pEnt->GetEntityVisArea() != nullptr, eoot_OBJECT, passInfo))
+		{
+			passCullMask &= ~kPassCullMainMask;
+		}
 	}
 
-	if (nCheckOcclusion && pEnt->m_pOcNode)
-		if (GetObjManager()->IsBoxOccluded(objBox, fEntDistance * passInfo.GetInverseZoomFactor(), &pEnt->m_pTempData->userData.m_OcclState,
-		                                   pEnt->m_pOcNode->m_pVisArea != NULL, eoot_OBJECT, passInfo))
-			return;
+	const CLodValue lodValue = pEnt->ComputeLod(pTempData->userData.nWantedLod, passInfo);
 
-	const CLodValue lodValue = pEnt->ComputeLod(pEnt->m_pTempData->userData.nWantedLod, passInfo);
-
-	if (GetCVars()->e_LodTransitionTime && passInfo.IsGeneralPass())
+	if ((passCullMask & kPassCullMainMask) != 0)
 	{
-		// Render current lod and (if needed) previous lod and perform time based lod transition using dissolve
+		if (GetCVars()->e_LodTransitionTime && passInfo.IsGeneralPass())
+		{
+			// Render current lod and (if needed) previous lod and perform time based lod transition using dissolve
 
-		CLodValue arrlodVals[2];
-		int nLodsNum = ComputeDissolve(lodValue, pEnt, fEntDistance, &arrlodVals[0]);
+			CLodValue arrlodVals[2];
+			int nLodsNum = ComputeDissolve(lodValue, pTempData, pEnt, fEntDistance, &arrlodVals[0]);
 
-		for (int i = 0; i < nLodsNum; i++)
-			pEnt->Render(passInfo, arrlodVals[i], pTerrainTexInfo);
+			for (int i = 0; i < nLodsNum; i++)
+				pEnt->Render(passInfo, arrlodVals[i], pTerrainTexInfo);
+		}
+		else
+		{
+			pEnt->Render(passInfo, lodValue, pTerrainTexInfo);
+		}
 	}
-	else
+
+	if ((passCullMask & ~kPassCullMainMask) != 0)
 	{
-		pEnt->Render(passInfo, lodValue, pTerrainTexInfo);
+		COctreeNode::RenderObjectIntoShadowViews(passInfo, fEntDistance, pEnt, objBox, passCullMask);
 	}
 }
 
-void CObjManager::RenderObject(IRenderNode* pEnt, PodArray<CDLight*>* pAffectingLights,
-                               const Vec3& vAmbColor, const AABB& objBox,
+void CObjManager::RenderObject(IRenderNode* pEnt,
+                               const Vec3& vAmbColor,
+                               const AABB& objBox,
                                float fEntDistance,
-                               bool bSunOnly, EERType eERType,
-                               const SRenderingPassInfo& passInfo)
+                               EERType eERType,
+                               const SRenderingPassInfo& passInfo,
+                               FrustumMaskType passCullMask)
 {
 	FUNCTION_PROFILER_3DENGINE;
 
 	const CVars* pCVars = GetCVars();
 
-#ifdef _DEBUG
-	const char* szName = pEnt->GetName();
-	const char* szClassName = pEnt->GetEntityClassName();
-#endif // _DEBUG
-
 	// do not draw if marked to be not drawn or already drawn in this frame
 	auto nRndFlags = pEnt->GetRndFlags();
 
-	if (nRndFlags & ERF_HIDDEN)
-		return;
+	CRY_ASSERT(eERType != eERType_MovableBrush);
 
 #ifndef _RELEASE
-	if (!passInfo.RenderEntities() && pEnt->GetOwnerEntity()) 
+	if (!passInfo.RenderEntities() && pEnt->GetOwnerEntity())
 		return;
 	// check cvars
 	switch (eERType)
@@ -203,7 +191,6 @@ void CObjManager::RenderObject(IRenderNode* pEnt, PodArray<CDLight*>* pAffecting
 	case eERType_Road:
 		if (!passInfo.RenderRoads()) return;
 		break;
-	case eERType_Cloud:
 	case eERType_DistanceCloud:
 	case eERType_CloudBlocker:
 		if (!passInfo.RenderClouds()) return;
@@ -228,11 +215,9 @@ void CObjManager::RenderObject(IRenderNode* pEnt, PodArray<CDLight*>* pAffecting
 			return; // skip invalid objects - usually only objects with invalid very big scale will reach this point
 		}
 	}
-	else
-		pAffectingLights = NULL;
 #endif
 
-	if (pEnt->m_dwRndFlags & ERF_COLLISION_PROXY || pEnt->m_dwRndFlags & ERF_RAYCAST_PROXY)
+	if (pEnt->GetRndFlags() & (ERF_COLLISION_PROXY | ERF_RAYCAST_PROXY))
 	{
 		// Collision proxy is visible in Editor while in editing mode.
 		if (!gEnv->IsEditor() || !gEnv->IsEditing())
@@ -243,23 +228,22 @@ void CObjManager::RenderObject(IRenderNode* pEnt, PodArray<CDLight*>* pAffecting
 	}
 
 	// allocate RNTmpData for potentially visible objects
-	if (!Get3DEngine()->CheckAndCreateRenderNodeTempData(&pEnt->m_pTempData, pEnt, passInfo))
-	{
+	SRenderNodeTempData* pTempData = Get3DEngine()->CheckAndCreateRenderNodeTempData(pEnt, passInfo);
+	if (!pTempData)
 		return;
-	}
 
-	PrefetchLine(pEnt->m_pTempData, 0); //m_pRNTmpData is >128 bytes, prefetching data used in dissolveref here
+	PrefetchLine(pTempData, 0); //m_pRNTmpData is >128 bytes, prefetching data used in dissolveref here
 
 #if CRY_PLATFORM_DESKTOP
 	// detect already culled occluder
 	if ((nRndFlags & ERF_GOOD_OCCLUDER))
 	{
-		if (pEnt->m_pTempData->userData.m_OcclState.nLastOccludedMainFrameID == passInfo.GetMainFrameID())
-			return;
+		if (pTempData->userData.m_OcclState.nLastOccludedMainFrameID == passInfo.GetMainFrameID())
+			passCullMask &= ~kPassCullMainMask;
 
 		if (pCVars->e_CoverageBufferDrawOccluders)
 		{
-			return;
+			passCullMask &= ~kPassCullMainMask;
 		}
 	}
 #endif
@@ -272,31 +256,27 @@ void CObjManager::RenderObject(IRenderNode* pEnt, PodArray<CDLight*>* pAffecting
 	// Note: Not worth prefetch on rCam or objBox as both have been recently used by calling functions & will be in cache - Rich S
 	if (!(nRndFlags & ERF_RENDER_ALWAYS) && !objBox.IsContainPoint(vCamPos))
 		if (eERType == eERType_Light || fEntDistance < pEnt->m_fWSMaxViewDist * pCVars->e_OcclusionCullingViewDistRatio)
-			if (IsBoxOccluded(objBox, fEntDistance * passInfo.GetInverseZoomFactor(), &pEnt->m_pTempData->userData.m_OcclState, pVisArea != NULL, eoot_OBJECT, passInfo))
-				return;
+			if (IsBoxOccluded(objBox, fEntDistance * passInfo.GetInverseZoomFactor(), &pTempData->userData.m_OcclState, pVisArea != NULL, eoot_OBJECT, passInfo))
+				passCullMask &= ~kPassCullMainMask;
 
 	SRendParams DrawParams;
 	DrawParams.pTerrainTexInfo = NULL;
-	DrawParams.dwFObjFlags = 0;
+	DrawParams.dwFObjFlags = FOB_NONE;
 	DrawParams.fDistance = fEntDistance;
 	DrawParams.AmbientColor = vAmbColor;
 	DrawParams.pRenderNode = pEnt;
 	DrawParams.nEditorSelectionID = pEnt->m_nEditorSelectionID;
 	//DrawParams.pInstance = pEnt;
 
-	if (eERType != eERType_Light && (pEnt->m_nInternalFlags & IRenderNode::REQUIRES_NEAREST_CUBEMAP))
+	if ((passCullMask & kPassCullMainMask) != 0 && eERType != eERType_Light && (pEnt->m_nInternalFlags & IRenderNode::REQUIRES_NEAREST_CUBEMAP))
 	{
 		Vec4 envProbMults = Vec4(1.0f, 1.0f, 1.0f, 1.0f);
 		uint16 nCubemapTexId = 0;
 		if (!(nCubemapTexId = CheckCachedNearestCubeProbe(pEnt, &envProbMults)) || !pCVars->e_CacheNearestCubePicking)
-			nCubemapTexId = GetNearestCubeProbe(pAffectingLights, pVisArea, objBox, true, &envProbMults);
+			nCubemapTexId = GetNearestCubeProbe(pVisArea, objBox, true, &envProbMults);
 
-		SRenderNodeTempData::SUserData* pUserDataRN = (pEnt->m_pTempData) ? &pEnt->m_pTempData->userData : 0;
-		if (pUserDataRN)
-		{
-			pUserDataRN->nCubeMapId = nCubemapTexId;
-			pUserDataRN->vEnvironmentProbeMults = envProbMults;
-		}
+		pTempData->userData.nCubeMapId = nCubemapTexId;
+		pTempData->userData.vEnvironmentProbeMults = envProbMults;
 
 		DrawParams.nTextureID = nCubemapTexId;
 	}
@@ -308,20 +288,19 @@ void CObjManager::RenderObject(IRenderNode* pEnt, PodArray<CDLight*>* pAffecting
 
 	// draw bbox
 #if !defined(_RELEASE)
-	if (pCVars->e_BBoxes)// && eERType != eERType_Light)
-	{
+	if (pCVars->e_BBoxes)
 		RenderObjectDebugInfo(pEnt, fEntDistance, passInfo);
-	}
 #endif
 
 	DrawParams.dwFObjFlags |= FOB_TRANS_MASK;
 
-	if (pEnt->m_dwRndFlags & ERF_NO_DECALNODE_DECALS)
+	if (pEnt->GetRndFlags() & ERF_NO_DECALNODE_DECALS)
 		DrawParams.dwFObjFlags |= FOB_DYNAMIC_OBJECT;
 
 	if (pEnt->GetRndFlags() & ERF_HUD_REQUIRE_DEPTHTEST)
 	{
 		DrawParams.nCustomFlags |= COB_HUD_REQUIRE_DEPTHTEST;
+		DrawParams.dwFObjFlags |= FOB_HUD_REQUIRE_DEPTHTEST;
 	}
 	if (pEnt->GetRndFlags() & ERF_DISABLE_MOTION_BLUR)
 	{
@@ -334,49 +313,61 @@ void CObjManager::RenderObject(IRenderNode* pEnt, PodArray<CDLight*>* pAffecting
 
 	DrawParams.m_pVisArea = pVisArea;
 
+	// Update clip volume
+	Vec3 vEntCenter = Get3DEngine()->GetEntityRegisterPoint(pEnt);
+	if (pVisArea)
+		pTempData->userData.m_pClipVolume = pVisArea;
+	else if (Get3DEngine()->GetClipVolumeManager()->IsClipVolumeRequired(pEnt))
+		Get3DEngine()->GetClipVolumeManager()->UpdateEntityClipVolume(vEntCenter, pEnt);
+
 	DrawParams.nClipVolumeStencilRef = 0;
-	if (pEnt->m_pTempData && pEnt->m_pTempData->userData.m_pClipVolume)
-		DrawParams.nClipVolumeStencilRef = pEnt->m_pTempData->userData.m_pClipVolume->GetStencilRef();
+	if (pTempData->userData.m_pClipVolume)
+		DrawParams.nClipVolumeStencilRef = pTempData->userData.m_pClipVolume->GetStencilRef();
 
 	DrawParams.nMaterialLayers = pEnt->GetMaterialLayers();
-	DrawParams.lodValue = pEnt->ComputeLod(pEnt->m_pTempData->userData.nWantedLod, passInfo);
+	DrawParams.lodValue = pEnt->ComputeLod(pTempData->userData.nWantedLod, passInfo);
 
-	if (GetCVars()->e_LodTransitionTime && passInfo.IsGeneralPass() && pEnt->GetRenderNodeType() == eERType_RenderProxy)
+	if ((passCullMask & kPassCullMainMask) != 0)
 	{
-		// Render current lod and (if needed) previous lod and perform time based lod transition using dissolve
-
-		CLodValue arrlodVals[2];
-		int nLodsNum = ComputeDissolve(DrawParams.lodValue, pEnt, fEntDistance, &arrlodVals[0]);
-
-		for (int i = 0; i < nLodsNum; i++)
+		if (GetCVars()->e_LodTransitionTime && passInfo.IsGeneralPass() && pEnt->GetRenderNodeType() == eERType_MovableBrush)
 		{
-			DrawParams.lodValue = arrlodVals[i];
+			// Render current lod and (if needed) previous lod and perform time based lod transition using dissolve
+
+			CLodValue arrlodVals[2];
+			int nLodsNum = ComputeDissolve(DrawParams.lodValue, pTempData, pEnt, fEntDistance, &arrlodVals[0]);
+
+			for (int i = 0; i < nLodsNum; i++)
+			{
+				DrawParams.lodValue = arrlodVals[i];
+				pEnt->Render(DrawParams, passInfo);
+			}
+		}
+		else
+		{
 			pEnt->Render(DrawParams, passInfo);
 		}
 	}
-	else
+
+	if ((passCullMask & ~kPassCullMainMask) != 0)
 	{
-		pEnt->Render(DrawParams, passInfo);
+		COctreeNode::RenderObjectIntoShadowViews(passInfo, fEntDistance, pEnt, objBox, passCullMask);
 	}
 }
 
 void CObjManager::RenderAllObjectDebugInfo()
 {
-	m_arrRenderDebugInfo.CoalesceMemory();
-	for (size_t i = 0; i < m_arrRenderDebugInfo.size(); ++i)
+	for (SObjManRenderDebugInfo& rRenderDebugInfo : m_arrRenderDebugInfo)
 	{
-		SObjManRenderDebugInfo& rRenderDebugInfo = m_arrRenderDebugInfo[i];
 		if (rRenderDebugInfo.pEnt)
 			RenderObjectDebugInfo_Impl(rRenderDebugInfo.pEnt, rRenderDebugInfo.fEntDistance);
 	}
-	m_arrRenderDebugInfo.resize(0);
+	m_arrRenderDebugInfo.clear();
 }
 
 void CObjManager::RemoveFromRenderAllObjectDebugInfo(IRenderNode* pEnt)
 {
-	for (size_t i = 0; i < m_arrRenderDebugInfo.size(); ++i)
+	for (SObjManRenderDebugInfo& rRenderDebugInfo : m_arrRenderDebugInfo)
 	{
-		SObjManRenderDebugInfo& rRenderDebugInfo = m_arrRenderDebugInfo[i];
 		if (rRenderDebugInfo.pEnt == pEnt)
 		{
 			rRenderDebugInfo.pEnt = NULL;
@@ -387,10 +378,23 @@ void CObjManager::RemoveFromRenderAllObjectDebugInfo(IRenderNode* pEnt)
 
 void CObjManager::RenderObjectDebugInfo_Impl(IRenderNode* pEnt, float fEntDistance)
 {
-
+#if !defined(_RELEASE)
 	if (GetCVars()->e_BBoxes > 0)
 	{
 		ColorF color(1, 1, 1, 1);
+
+		switch (pEnt->GetRenderNodeType())
+		{
+		case eERType_ParticleEmitter: color = ColorF(1.000f, 0.000f, 0.000f, 1); break;
+		case eERType_Vegetation:      color = ColorF(0.000f, 1.000f, 0.000f, 1); break;
+		case eERType_WaterVolume:     color = ColorF(0.000f, 0.000f, 1.000f, 1); break;
+		case eERType_WaterWave:       color = ColorF(0.000f, 0.000f, 1.000f, 1); break;
+
+		case eERType_Light:           color = ColorF(0.707f, 0.707f, 0.000f, 1); break;
+		case eERType_Character:       color = ColorF(0.707f, 0.000f, 0.707f, 1); break;
+		case eERType_Brush:           color = ColorF(0.000f, 0.707f, 0.707f, 1); break;
+		case eERType_MovableBrush:    color = ColorF(0.000f, 0.707f, 0.707f, 1); break;
+		}
 
 		if (GetCVars()->e_BBoxes == 2 && pEnt->GetRndFlags() & ERF_SELECTED)
 		{
@@ -416,6 +420,7 @@ void CObjManager::RenderObjectDebugInfo_Impl(IRenderNode* pEnt, float fEntDistan
 
 		pRenAux->DrawAABB(rAABB, false, color, eBBD_Faceted);
 	}
+#endif
 }
 
 bool CObjManager::RayRenderMeshIntersection(IRenderMesh* pRenderMesh, const Vec3& vInPos, const Vec3& vInDir, Vec3& vOutPos, Vec3& vOutNormal, bool bFastTest, IMaterial* pMat)
@@ -449,8 +454,11 @@ bool CObjManager::RayRenderMeshIntersection(IRenderMesh* pRenderMesh, const Vec3
 
 	// get indices
 	vtx_idx* pInds = pRenderMesh->GetIndexPtr(FSL_READ);
+
+#if defined(USE_CRY_ASSERT)
 	int nInds = pRenderMesh->GetIndicesCount();
 	assert(nInds % 3 == 0);
+#endif
 
 	float fClosestHitDistance = -1;
 

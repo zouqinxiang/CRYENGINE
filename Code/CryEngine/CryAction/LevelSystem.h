@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #ifndef __LEVELSYSTEM_H__
 #define __LEVELSYSTEM_H__
@@ -17,10 +17,13 @@
 	#define Log_LevelRotation(...)
 #endif
 
+class CLevelLoadTimeslicer;
+
 class CLevelInfo :
 	public ILevelInfo
 {
 	friend class CLevelSystem;
+	friend class CLevelLoadTimeslicer;
 public:
 	CLevelInfo() : m_heightmapSize(0), m_bMetaDataRead(false), m_isModLevel(false), m_scanTag(ILevelSystem::TAG_UNKNOWN), m_levelTag(ILevelSystem::TAG_UNKNOWN)
 	{
@@ -77,6 +80,7 @@ private:
 
 	string                                 m_levelPakFullPath;
 	string                                 m_levelMMPakFullPath;
+	string                                 m_levelSvoPakFullPath;
 
 	std::vector<string>                    m_gamerules;
 	int                                    m_heightmapSize;
@@ -197,8 +201,9 @@ class CLevelSystem :
 	public ILevelSystem,
 	public ISystem::ILoadingProgressListener
 {
+	friend class CLevelLoadTimeslicer;
 public:
-	CLevelSystem(ISystem* pSystem, const char* levelsFolder);
+	CLevelSystem(ISystem* pSystem);
 	virtual ~CLevelSystem();
 
 	void Release() { delete this; };
@@ -216,6 +221,8 @@ public:
 
 	virtual ILevelInfo*       GetCurrentLevel() const { return m_pCurrentLevelInfo; }
 	virtual ILevelInfo*       LoadLevel(const char* levelName);
+	virtual bool              StartLoadLevel(const char* szLevelName);
+	virtual ELevelLoadStatus  UpdateLoadLevelStatus();
 	virtual void              UnLoadLevel();
 	virtual ILevelInfo*       SetEditorLoadedLevel(const char* levelName, bool bReadLevelInfoMetaData = false);
 	virtual void              PrepareNextLevel(const char* levelName);
@@ -244,17 +251,14 @@ private:
 
 	// ILevelSystemListener events notification
 	void OnLevelNotFound(const char* levelName);
-	void OnLoadingStart(ILevelInfo* pLevel);
+	bool OnLoadingStart(ILevelInfo* pLevel);
 	void OnLoadingLevelEntitiesStart(ILevelInfo* pLevelInfo);
 	void OnLoadingComplete(ILevelInfo* pLevel);
 	void OnLoadingError(ILevelInfo* pLevel, const char* error);
 	void OnLoadingProgress(ILevelInfo* pLevel, int progressAmount);
 	void OnUnloadComplete(ILevelInfo* pLevel);
 
-	// lowercase string and replace backslashes with forward slashes
-	// TODO: move this to a more general place in CryEngine
-	string& UnifyName(string& name);
-	void    ScanFolder(const char* subfolder, bool modFolder, const uint32 tag);
+	void    ScanFolder(const string& rootFolder, bool modFolder, const uint32 tag);
 	void    LogLoadingTime();
 	bool    LoadLevelInfo(CLevelInfo& levelInfo);
 
@@ -262,6 +266,7 @@ private:
 	// directly cast to the interface
 	CLevelInfo* GetLevelInfoInternal(int level);
 	CLevelInfo* GetLevelInfoInternal(const char* levelName);
+	CLevelInfo* GetLevelInfoByPathInternal(const char* szLevelPath);
 
 	typedef std::vector<CLevelRotation> TExtendedLevelRotations;
 
@@ -288,9 +293,11 @@ private:
 
 	static int                         s_loadCount;
 
-	std::vector<ILevelSystemListener*> m_listeners;
+	std::set<ILevelSystemListener*>    m_listeners;
 
 	DynArray<string>                   m_levelTypeList;
+
+	std::unique_ptr<CLevelLoadTimeslicer> m_pLevelLoadTimeslicer;
 };
 
 #endif //__LEVELSYSTEM_H__

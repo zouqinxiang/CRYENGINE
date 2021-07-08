@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "EquipPackDialog.h"
@@ -62,13 +62,13 @@ class CEquipPackEditorClass : public IViewPaneClass
 	//////////////////////////////////////////////////////////////////////////
 	// IClassDesc
 	//////////////////////////////////////////////////////////////////////////
-	virtual ESystemClassID SystemClassID()   override { return ESYSTEM_CLASS_VIEWPANE; };
-	virtual const char*    ClassName()       override { return "EquipPackEditor"; };
-	virtual const char*    Category()        override { return "Editor"; };
+	virtual ESystemClassID SystemClassID()   override { return ESYSTEM_CLASS_VIEWPANE; }
+	virtual const char*    ClassName()       override { return "EquipPackEditor"; }
+	virtual const char*    Category()        override { return "Editor"; }
 	virtual const char*    GetMenuPath()     override { return "Deprecated"; }
-	virtual CRuntimeClass* GetRuntimeClass() override { return RUNTIME_CLASS(CEquipPackEditor); };
-	virtual const char*    GetPaneTitle()    override { return _T("Equip Pack Editor"); };
-	virtual bool           SinglePane()      override { return true; };
+	virtual CRuntimeClass* GetRuntimeClass() override { return RUNTIME_CLASS(CEquipPackEditor); }
+	virtual const char*    GetPaneTitle()    override { return _T("Equip Pack Editor"); }
+	virtual bool           SinglePane()      override { return true; }
 };
 
 REGISTER_CLASS_DESC(CEquipPackEditorClass);

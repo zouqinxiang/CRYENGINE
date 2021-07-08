@@ -1,7 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
-
-#ifndef __SCROLLABLEWINDOW_H__
-#define __SCROLLABLEWINDOW_H__
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -31,5 +28,3 @@ protected:
 
 	bool m_boAutoScrollWindow;
 };
-
-#endif // __SCROLLABLEWINDOW_H__

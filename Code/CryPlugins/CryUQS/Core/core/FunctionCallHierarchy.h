@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -22,7 +22,7 @@ namespace UQS
 		{
 		public:
 			explicit                                      CFunctionCallHierarchy() {}
-			bool                                          AddAndInstantiateFunctionBlueprint(const CFunctionBlueprint& functionBlueprintToInstantiate, const SQueryBlackboard& blackboard, Shared::CUqsString& error);
+			bool                                          AddAndInstantiateFunctionBlueprint(const CFunctionBlueprint& functionBlueprintToInstantiate, const SQueryContext& queryContext, Shared::CUqsString& error);
 			void                                          ExecuteAll(const Client::IFunction::SExecuteContext& executeContext, void* pParamsToWriteTheReturnValuesTo, const Client::IInputParameterRegistry& registryToLookupParamsOffsets) const;
 
 		private:

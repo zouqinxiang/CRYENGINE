@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #ifndef __SERIALIZATION_HELPER_H__
 #define __SERIALIZATION_HELPER_H__
@@ -122,7 +122,7 @@ public:
 		else
 		{
 			m_bBufferOverflow = true;
-			CRY_ASSERT_MESSAGE(false, "Buffer size is not large enough");
+			CRY_ASSERT(false, "Buffer size is not large enough");
 		}
 	}
 
@@ -143,7 +143,7 @@ public:
 		else
 		{
 			m_bBufferOverflow = true;
-			CRY_ASSERT_MESSAGE(false, "Buffer size is not large enough");
+			CRY_ASSERT(false, "Buffer size is not large enough");
 		}
 		return pResult;
 	}

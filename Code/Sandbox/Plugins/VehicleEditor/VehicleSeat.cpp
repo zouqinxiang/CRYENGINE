@@ -1,8 +1,8 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "VehicleSeat.h"
-
+#include "Util/MFCUtil.h"
 #include "VehiclePrototype.h"
 #include "VehicleData.h"
 #include "VehiclePart.h"
@@ -39,10 +39,9 @@ IVariable* CreateWeaponVar()
 
 //////////////////////////////////////////////////////////////////////////
 CVehicleSeat::CVehicleSeat()
+	: m_pVehicle(nullptr)
+	, m_pPart(nullptr)
 {
-	m_pVehicle = 0;
-	m_pPart = 0;
-	m_pVar = 0;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -53,18 +52,19 @@ bool CVehicleSeat::Init(CBaseObject* prev, const string& file)
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CVehicleSeat::Display(DisplayContext& dc)
+void CVehicleSeat::Display(CObjectRenderHelper& objRenderHelper)
 {
 	return;
 
-	COLORREF color = GetColor();
+	SDisplayContext& dc = objRenderHelper.GetDisplayContextRef();
+	COLORREF color = CMFCUtils::ColorBToColorRef(GetColor());
 
 	if (IsSelected())
 	{
 		dc.SetSelectedColor(0.6f);
 	}
 
-	//if (dc.flags & DISPLAY_2D)
+	//if (dc.display2D)
 	{
 		AABB box;
 		GetLocalBounds(box);
@@ -245,20 +245,20 @@ void CVehicleSeat::AddWeapon(int weaponType, CVehicleWeapon* pWeap, IVariable* p
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CVehicleSeat::OnObjectEvent(CBaseObject* node, int event)
+void CVehicleSeat::OnObjectEvent(const CBaseObject* pObject, const CObjectEvent& event)
 {
-	if (event == OBJECT_ON_DELETE)
+	if (event.m_type == OBJECT_ON_DELETE)
 	{
-		VeedLog("[CVehicleSeat]: ON_DELETE for %s", node->GetName());
+		VeedLog("[CVehicleSeat]: ON_DELETE for %s", pObject->GetName());
 		// delete variable
-		if (IVeedObject* pVO = IVeedObject::GetVeedObject(node))
+		if (IVeedObject* pVO = IVeedObject::GetVeedObject(const_cast<CBaseObject*>(pObject)))
 		{
 			if (pVO->DeleteVar())
 			{
 				if (m_pVar)
 					m_pVar->DeleteVariable(pVO->GetVariable(), true);
 				pVO->SetVariable(0);
-				VeedLog("[CVehiclePart] deleting var for %s", node->GetName());
+				VeedLog("[CVehiclePart] deleting var for %s", pObject->GetName());
 			}
 		}
 	}
@@ -267,7 +267,7 @@ void CVehicleSeat::OnObjectEvent(CBaseObject* node, int event)
 //////////////////////////////////////////////////////////////////////////
 void CVehicleSeat::AttachChild(CBaseObject* child, bool bKeepPos, bool bInvalidateTM)
 {
-	child->AddEventListener(functor(*this, &CVehicleSeat::OnObjectEvent));
+	child->signalChanged.Connect(this, &CVehicleSeat::OnObjectEvent);
 
 	CBaseObject::AttachChild(child, bKeepPos, bInvalidateTM);
 }

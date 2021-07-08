@@ -1,13 +1,10 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
 //-----------------------------------------------------------------------------------------------
 
 #include <CryCore/Platform/platform.h>
-#include <CrySystem/ISystem.h>  // prerequisite for IGame.h
-#include <CryGame/IGame.h>
-#include <CryGame/IGameFramework.h>
 #include <CryExtension/ClassWeaver.h>
 #include <CryExtension/CryCreateClassInstance.h>
 
@@ -29,7 +26,7 @@
 // if this is #defined, then CFunctionBlueprint::InstantiateCallHierarchy() will add extra code to check for correct return types inside the call-hierarchy
 #define UQS_CHECK_RETURN_TYPE_CONSISTENCY_IN_CALL_HIERARCHY
 
-// if this is #defined, then the CQuery will add some asserts() to ensure proper cleanup once all deferred-evaluators report having finished their work on the remaining items
+// if this is #defined, then the CQuery will add some CRY_ASSERTs() to ensure proper cleanup once all deferred-evaluators report having finished their work on the remaining items
 #define UQS_CHECK_PROPER_CLEANUP_ONCE_ALL_ITEMS_ARE_INSPECTED
 
 // - the maximum number of each, instant- and deferred-evaluators in a query blueprint
@@ -57,7 +54,7 @@ namespace UQS
 // - these macros can be used on the client-side when registering input parameters of functions, generators and evaluators
 // - they have to be put into the SParams struct of the according class
 #define UQS_EXPOSE_PARAMS_BEGIN static void Expose(UQS::Client::Internal::CInputParameterRegistry& registry) {
-#define UQS_EXPOSE_PARAM(nameOfParam, memberInParamsStruct)  registry.RegisterParameterType(nameOfParam, UQS::Shared::SDataTypeHelper<decltype(memberInParamsStruct)>::GetTypeInfo(), offsetof(SParams, memberInParamsStruct))
+#define UQS_EXPOSE_PARAM(nameOfParam, memberInParamsStruct, idAsFourCharacterString, description)  registry.RegisterParameterType(nameOfParam, idAsFourCharacterString, UQS::Shared::SDataTypeHelper<decltype(memberInParamsStruct)>::GetTypeInfo(), offsetof(SParams, memberInParamsStruct), description)
 #define UQS_EXPOSE_PARAMS_END }
 
 // UQS_TODO() macro
@@ -75,3 +72,8 @@ namespace UQS
 #ifndef UQS_SCHEMATYC_SUPPORT
 #error UQS_SCHEMATYC_SUPPORT has to be set from the outside (i. e. at compiler level) to 0 or 1 (but is not set at all)
 #endif
+
+
+// - specifies the subsystem for use in the frame profiler
+// - currently, we don't have specific subsystems for plugins like UQS, so we specify a rather generic one here
+#define UQS_PROFILED_SUBSYSTEM_TO_USE PROFILE_GAME

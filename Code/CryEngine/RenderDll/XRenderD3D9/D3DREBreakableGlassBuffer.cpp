@@ -1,10 +1,9 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 // Includes
 #include "StdAfx.h"
 #include "D3DREBreakableGlassBuffer.h"
 
-#include "DriverD3D.h"
 #include <CryRenderer/VertexFormats.h>
 
 // Shared buffer-type constants
@@ -237,7 +236,7 @@ bool CREBreakableGlassBuffer::RT_UpdateVertexBuffer(const uint32 id, const EBuff
 	if (vertexCount > 0 && buffer.verticesHdl && pVertData && RT_IsBufferValid(id, buffType))
 	{
 		const size_t devHdl = buffer.verticesHdl;
-		CRY_ASSERT_MESSAGE(devHdl >= 0, "Updating an invalid VBuffer.");
+		CRY_ASSERT(devHdl >= 0, "Updating an invalid VBuffer.");
 
 		const uint32 stride = sizeof(SVF_P3F_C4B_T2F);
 		gRenDev->m_DevBufMan.UpdateBuffer(devHdl, pVertData, vertexCount * stride);
@@ -266,7 +265,7 @@ bool CREBreakableGlassBuffer::RT_UpdateIndexBuffer(const uint32 id, const EBuffe
 	if (indexCount > 0 && buffer.indicesHdl && pIndData && RT_IsBufferValid(id, buffType))
 	{
 		const size_t devHdl = buffer.indicesHdl;
-		CRY_ASSERT_MESSAGE(devHdl >= 0, "Updating an invalid VBuffer.");
+		CRY_ASSERT(devHdl >= 0, "Updating an invalid VBuffer.");
 
 		const uint32 stride = sizeof(uint16);
 		gRenDev->m_DevBufMan.UpdateBuffer(devHdl, pIndData, indexCount * stride);
@@ -314,7 +313,6 @@ bool CREBreakableGlassBuffer::RT_DrawBuffer(const uint32 id, const EBufferType b
 {
 	const uint32 cyclicId = id % NumBufferSlots;
 	const SBuffer& buffer = m_buffer[buffType][cyclicId];
-	const SVertexConst& bufferConsts = s_bufferConsts[buffType];
 
 	bool success = false;
 
@@ -338,7 +336,10 @@ bool CREBreakableGlassBuffer::RT_DrawBuffer(const uint32 id, const EBufferType b
 //--------------------------------------------------------------------------------------------------
 void CREBreakableGlassBuffer::DrawBuffer(const uint32 cyclicId, const EBufferType buffType, const uint32 indCount)
 {
-	CRY_ASSERT_MESSAGE(indCount % 3 == 0, "Invalid number of glass indices");
+	CRY_ASSERT(indCount % 3 == 0, "Invalid number of glass indices");
+
+	ASSERT_LEGACY_PIPELINE
+		/*
 
 	const SBuffer& buffer = m_buffer[buffType][cyclicId];
 	const SVertexConst& bufferConsts = s_bufferConsts[buffType];
@@ -346,7 +347,7 @@ void CREBreakableGlassBuffer::DrawBuffer(const uint32 cyclicId, const EBufferTyp
 	if (IsVBufferValid(buffer))
 	{
 		CD3D9Renderer* pRenderer = gcpRendD3D;
-		size_t vbOffset = 0, tbOffset = 0, ibOffset = 0;
+		buffer_size_t vbOffset = 0, tbOffset = 0, ibOffset = 0;
 
 		// Get buffers
 		D3DVertexBuffer* pVBuffer = pRenderer->m_DevBufMan.GetD3DVB(buffer.verticesHdl, &vbOffset);
@@ -359,7 +360,7 @@ void CREBreakableGlassBuffer::DrawBuffer(const uint32 cyclicId, const EBufferTyp
 			const int tanVStream = 1;
 
 			// Bind data
-			pRenderer->FX_SetVertexDeclaration(1 << VSF_TANGENTS, eVF_P3F_C4B_T2F);
+			pRenderer->FX_SetVertexDeclaration(1 << VSF_TANGENTS, EDefaultInputLayouts::P3F_C4B_T2F);
 			pRenderer->FX_SetVStream(coreVStream, pVBuffer, vbOffset, sizeof(SVF_P3F_C4B_T2F));
 			pRenderer->FX_SetVStream(tanVStream, pTBuffer, tbOffset, sizeof(SPipTangents));
 			pRenderer->FX_SetIStream(pIBuffer, ibOffset, Index16);
@@ -369,4 +370,5 @@ void CREBreakableGlassBuffer::DrawBuffer(const uint32 cyclicId, const EBufferTyp
 			pRenderer->FX_DrawIndexedPrimitive(eptTriangleList, 0, 0, bufferConsts.maxNumVerts, 0, indCount);
 		}
 	}
+	*/
 }//-------------------------------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #ifndef __WorldMonitor_h__
 #define __WorldMonitor_h__
@@ -41,7 +41,7 @@ private:
 	};
 	
 	// physics event handlers
-	static int StateChangeHandler(const EventPhys* pPhysEvent);
+	static int BBoxChangeHandler(const EventPhys* pPhysEvent);
 	static int EntityRemovedHandler(const EventPhys* pPhysEvent);
 	static int EntityRemovedHandlerAsync(const EventPhys* pPhysEvent);
 

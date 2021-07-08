@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 
@@ -13,13 +13,14 @@ namespace UQS
 			: m_queryIDOfCurrentHistoricQuery{ CQueryID::CreateInvalid(), CQueryID::CreateInvalid() }
 			, m_historyToManage(EHistoryOrigin::Live)
 			, m_indexOfFocusedItem(s_noItemFocusedIndex)
+			, m_bAutomaticUpdateDebugRendering3DInProgress(false)
 		{
 			// nothing
 		}
 
 		void CQueryHistoryManager::RegisterQueryHistoryListener(IQueryHistoryListener* pListener)
 		{
-			assert(pListener);
+			CRY_ASSERT(pListener);
 			stl::push_back_unique(m_listeners, pListener);
 		}
 
@@ -28,8 +29,12 @@ namespace UQS
 			stl::find_and_erase(m_listeners, pListener);
 		}
 
-		void CQueryHistoryManager::UpdateDebugRendering3D(const SDebugCameraView& view, const SEvaluatorDrawMasks& evaluatorDrawMasks)
+		void CQueryHistoryManager::UpdateDebugRendering3D(const SDebugCameraView* pOptionalView, const SEvaluatorDrawMasks& evaluatorDrawMasks)
 		{
+			// - if this CRY_ASSERT fails, then the game code tries to do the debug-render when it hasn't declared to do so
+			// - this check is done to prevent updating from more than one place
+			CRY_ASSERT(gEnv->IsEditing() || (m_bAutomaticUpdateDebugRendering3DInProgress == !g_pHub->GetOverrideFlags().Check(EHubOverrideFlags::CallUpdateDebugRendering3D)));
+
 			const CQueryHistory& history = m_queryHistories[m_historyToManage];
 			const CQueryID& queryIdOfSelectedHistoricQuery = m_queryIDOfCurrentHistoricQuery[m_historyToManage];
 			const CTimeValue now = gEnv->pTimer->GetAsyncTime();
@@ -66,7 +71,7 @@ namespace UQS
 				if (const CHistoricQuery* pHistoricQueryToDraw = history.FindHistoryEntryByQueryID(queryIdOfSelectedHistoricQuery))
 				{
 					const size_t indexOfPreviouslyFocusedItem = m_indexOfFocusedItem;
-					const bool bCurrentlyFocusingAnItem = pHistoricQueryToDraw->FindClosestItemInView(view, m_indexOfFocusedItem);
+					const bool bCurrentlyFocusingAnItem = pOptionalView && pHistoricQueryToDraw->FindClosestItemInView(*pOptionalView, m_indexOfFocusedItem);
 
 					if (bCurrentlyFocusingAnItem)
 					{
@@ -92,34 +97,20 @@ namespace UQS
 			// add some meta data to the live history before serializing it
 			//
 
-			{
-				// add date + time as meta data
-				char dateAndTimeAsString[1024] = "";
-				time_t ltime;
-				if (time(&ltime) != (time_t)-1)
-				{
-					if (struct tm* pTm = localtime(&ltime))
-					{
-						strftime(dateAndTimeAsString, CRY_ARRAY_COUNT(dateAndTimeAsString), "%Y-%m-%d %H:%M:%S", pTm);
-					}
-				}
-				m_queryHistories[EHistoryOrigin::Live].SetArbitraryMetaDataForSerialization("serializationDateTime", dateAndTimeAsString);
-
-				// TODO: could add more meta data (e. g. engine version)
-			}
+			AddSomeMetaDataToLiveHistory();
 
 			//
 			// serialize the query history
 			//
 
-			Serialization::IArchiveHost* pArchiveHost = gEnv->pSystem->GetArchiveHost();
-			if (pArchiveHost->SaveXmlFile(szXmlFilePath, Serialization::SStruct(m_queryHistories[EHistoryOrigin::Live]), "UQSQueryHistory"))
+			string internalError;
+			if (m_queryHistories[EHistoryOrigin::Live].SerializeToXmlFile(szXmlFilePath, internalError))
 			{
 				return true;
 			}
 			else
 			{
-				error.Format("Could not serialize the live query history to xml file '%s' (Serialization::IArchiveHost::SaveXmlFile() failed for some reason)", szXmlFilePath);
+				error.Format("Could not serialize the live query history to xml file '%s': %s", szXmlFilePath, internalError.c_str());
 				return false;
 			}
 		}
@@ -127,9 +118,9 @@ namespace UQS
 		bool CQueryHistoryManager::DeserializeQueryHistory(const char* szXmlFilePath, Shared::IUqsString& error)
 		{
 			CQueryHistory tempQueryHistory;
+			string internalError;
 
-			Serialization::IArchiveHost* pArchiveHost = gEnv->pSystem->GetArchiveHost();
-			if (pArchiveHost->LoadXmlFile(Serialization::SStruct(tempQueryHistory), szXmlFilePath))
+			if (tempQueryHistory.DeserializeFromXmlFile(szXmlFilePath, internalError))
 			{
 				m_queryHistories[EHistoryOrigin::Deserialized] = std::move(tempQueryHistory);
 				m_queryIDOfCurrentHistoricQuery[EHistoryOrigin::Deserialized] = CQueryID::CreateInvalid();
@@ -142,7 +133,7 @@ namespace UQS
 			}
 			else
 			{
-				error.Format("Could not de-serialize the query history from xml file '%s'", szXmlFilePath);
+				error.Format("Could not de-serialize the query history from xml file '%s': %s", szXmlFilePath, internalError.c_str());
 				return false;
 			}
 		}
@@ -183,7 +174,7 @@ namespace UQS
 				break;
 
 			default:
-				assert(0);
+				CRY_ASSERT(0);
 			}
 		}
 
@@ -292,9 +283,9 @@ namespace UQS
 			}
 		}
 
-		HistoricQuerySharedPtr CQueryHistoryManager::AddNewLiveHistoricQuery(const CQueryID& queryID, const char* querierName, const CQueryID& parentQueryID)
+		HistoricQuerySharedPtr CQueryHistoryManager::AddNewLiveHistoricQuery(const CQueryID& queryID, const char* querierName, const CQueryID& parentQueryID, int priority)
 		{
-			HistoricQuerySharedPtr newHistoricQuery = m_queryHistories[IQueryHistoryManager::EHistoryOrigin::Live].AddNewHistoryEntry(queryID, querierName, parentQueryID, this);
+			HistoricQuerySharedPtr newHistoricQuery = m_queryHistories[IQueryHistoryManager::EHistoryOrigin::Live].AddNewHistoryEntry(queryID, querierName, parentQueryID, priority, this);
 			return newHistoricQuery;
 		}
 
@@ -306,6 +297,47 @@ namespace UQS
 		void CQueryHistoryManager::UnderlyingQueryIsGettingDestroyed(const CQueryID& queryID)
 		{
 			NotifyListeners(IQueryHistoryListener::EEventType::HistoricQueryJustFinishedInLiveQueryHistory, queryID);
+		}
+
+		void CQueryHistoryManager::AutomaticUpdateDebugRendering3DBegin()
+		{
+			CRY_ASSERT(!m_bAutomaticUpdateDebugRendering3DInProgress);
+			m_bAutomaticUpdateDebugRendering3DInProgress = true;
+		}
+
+		void CQueryHistoryManager::AutomaticUpdateDebugRendering3DEnd()
+		{
+			CRY_ASSERT(m_bAutomaticUpdateDebugRendering3DInProgress);
+			m_bAutomaticUpdateDebugRendering3DInProgress = false;
+		}
+
+		void CQueryHistoryManager::SerializeLiveQueryHistoryAsync(const char* szXmlFilePath)
+		{
+			AddSomeMetaDataToLiveHistory();
+			m_queryHistories[IQueryHistoryManager::EHistoryOrigin::Live].StartAsyncXmlSerializeJob(szXmlFilePath);
+		}
+
+		void CQueryHistoryManager::PrintStatisticsOfLiveAndDeserializedHistoryToConsole() const
+		{
+			m_queryHistories[IQueryHistoryManager::EHistoryOrigin::Live].PrintStatisticsToConsole        ("Live query history:         ");
+			m_queryHistories[IQueryHistoryManager::EHistoryOrigin::Deserialized].PrintStatisticsToConsole("Deserialized query history: ");
+		}
+
+		void CQueryHistoryManager::AddSomeMetaDataToLiveHistory()
+		{
+			// add date + time as meta data
+			char dateAndTimeAsString[1024] = "";
+			time_t ltime;
+			if (time(&ltime) != (time_t)-1)
+			{
+				if (struct tm* pTm = localtime(&ltime))
+				{
+					strftime(dateAndTimeAsString, CRY_ARRAY_COUNT(dateAndTimeAsString), "%Y-%m-%d %H:%M:%S", pTm);
+				}
+			}
+			m_queryHistories[EHistoryOrigin::Live].SetArbitraryMetaDataForSerialization("serializationDateTime", dateAndTimeAsString);
+
+			// TODO: could add more meta data (e. g. engine version)
 		}
 
 		void CQueryHistoryManager::NotifyListeners(IQueryHistoryListener::EEventType eventType) const

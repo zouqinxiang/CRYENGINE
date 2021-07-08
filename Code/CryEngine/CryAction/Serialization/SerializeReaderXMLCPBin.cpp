@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "SerializeReaderXMLCPBin.h"
@@ -16,7 +16,7 @@ CSerializeReaderXMLCPBin::CSerializeReaderXMLCPBin(XMLCPB::CNodeLiveReaderRef no
 	, m_binReader(binReader)
 {
 	//m_curTime = gEnv->pTimer->GetFrameStartTime();
-	assert(nodeRef.IsValid());
+	CRY_ASSERT(nodeRef.IsValid());
 	m_nodeStack.reserve(MAX_NODE_STACK_DEPTH);
 	m_nodeStack.push_back(nodeRef);
 }
@@ -113,8 +113,8 @@ bool CSerializeReaderXMLCPBin::ReadScript(XMLCPB::CNodeLiveReaderRef nodeRef, Sc
 			int childCount = nodeRef->GetNumChildren();
 			int arrayIndex = 0;
 			SmartScriptTable tbl;
-			if (value.type == ANY_TTABLE && value.table)
-				tbl = value.table;
+			if (value.GetType() == EScriptAnyType::Table && value.GetScriptTable())
+				tbl = value.GetScriptTable();
 			else
 				tbl = SmartScriptTable(gEnv->pScriptSystem);
 			int nCount = min(arrayCount, childCount);
@@ -137,8 +137,8 @@ bool CSerializeReaderXMLCPBin::ReadScript(XMLCPB::CNodeLiveReaderRef nodeRef, Sc
 		{
 			int childCount = nodeRef->GetNumChildren();
 			SmartScriptTable tbl;
-			if (value.type == ANY_TTABLE && value.table)
-				tbl = value.table;
+			if (value.GetType() == EScriptAnyType::Table && value.GetScriptTable())
+				tbl = value.GetScriptTable();
 			else
 				tbl = SmartScriptTable(gEnv->pScriptSystem);
 			for (int i = 0; i < childCount; i++)
@@ -283,7 +283,7 @@ bool CSerializeReaderXMLCPBin::Value(const char* name, XmlNodeRef& value)
 		return false;
 	}
 
-	assert(BNode->GetNumChildren() == 1);
+	CRY_ASSERT(BNode->GetNumChildren() == 1);
 	BNode = BNode->GetChildNode(uint32(0));
 
 	if (!value)
@@ -306,7 +306,7 @@ bool CSerializeReaderXMLCPBin::ValueByteArray(const char* name, uint8*& rdata, u
 	}
 	else
 	{
-		assert(outSize == 0);
+		CRY_ASSERT(outSize == 0);
 		CurNode()->ReadAttr(name, rdata, outSize);
 	}
 	return true;
@@ -367,7 +367,7 @@ void CSerializeReaderXMLCPBin::EndGroup()
 	{
 		m_nodeStack.pop_back();
 	}
-	assert(!m_nodeStack.empty());
+	CRY_ASSERT(!m_nodeStack.empty());
 }
 
 //////////////////////////////////////////////////////////////////////////

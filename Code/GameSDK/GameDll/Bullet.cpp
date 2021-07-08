@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
 -------------------------------------------------------------------------
@@ -21,9 +21,10 @@ History:
 #include "AmmoParams.h"
 #include "Actor.h"
 #include "WeaponSystem.h"
+#include "GameCVars.h"
 #include <CryAnimation/ICryAnimation.h>
 #include <CryAISystem/IAIObject.h>
-
+#include <Cry3DEngine/ISurfaceType.h>
 #include <IPerceptionManager.h>
 
 struct SPhysicsRayWrapper
@@ -289,7 +290,7 @@ void CBullet::ProcessHit(CGameRules& gameRules, const EventPhysCollision& collis
 //------------------------------------------------------------------------
 void CBullet::HandleEvent(const SGameObjectEvent &event)
 {
-	FUNCTION_PROFILER(GetISystem(), PROFILE_GAME);
+	CRY_PROFILE_FUNCTION(PROFILE_GAME);
 
 	BaseClass::HandleEvent(event);
 
@@ -477,7 +478,7 @@ float CBullet::GetFinalDamage( const Vec3& hitPos ) const
 //////////////////////////////////////////////////////////////////////////
 void CBullet::HandlePierceableSurface( const EventPhysCollision* pCollision, IEntity* pHitTarget, const Vec3& hitDirection, bool bProcessedCollisionEvent )
 {
-	FUNCTION_PROFILER(GetISystem(), PROFILE_GAME);
+	CRY_PROFILE_FUNCTION(PROFILE_GAME);
 
 	const SPierceabilityParams& pierceabilityParams = m_pAmmoParams->pierceabilityParams;
 	
@@ -671,7 +672,7 @@ void CBullet::SetUpParticleParams(IEntity* pOwnerEntity, uint8 pierceabilityModi
 
 bool CBullet::RayTraceGeometry( const EventPhysCollision* pCollision, const Vec3& pos, const Vec3& hitDirection, SBackHitInfo* pBackHitInfo )
 {
-	FUNCTION_PROFILER(GetISystem(), PROFILE_GAME);
+	CRY_PROFILE_FUNCTION(PROFILE_GAME);
 
 	bool exitPointFound = false;
 

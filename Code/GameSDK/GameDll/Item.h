@@ -1,22 +1,6 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
-/*************************************************************************
- -------------------------------------------------------------------------
-  $Id$
-  $DateTime$
-  Description: C++ Item Implementation
-  
- -------------------------------------------------------------------------
-  History:
-  - 27:10:2004   11:25 : Created by Márcio Martins
-
-*************************************************************************/
-#ifndef __ITEM_H__
-#define __ITEM_H__
-
-#if _MSC_VER > 1000
 # pragma once
-#endif
 
 
 #include <CryScriptSystem/IScriptSystem.h>
@@ -45,8 +29,8 @@
 
 class CItemSharedParams;
 class CTagState;
-class IActionController;
 
+struct IActionController;
 struct IAttachmentManager;
 struct ICharacterInstance;
 struct SParams;
@@ -346,7 +330,8 @@ public:
 	virtual void PostUpdate( float frameTime ) {};
 	virtual void PostRemoteSpawn() {};
 	virtual void HandleEvent( const SGameObjectEvent& );
-	virtual void ProcessEvent(SEntityEvent& );
+	virtual void ProcessEvent(const SEntityEvent& );
+	virtual Cry::Entity::EventFlags GetEventMask() const;
 	virtual void SetChannelId(uint16 id) {};
 	virtual void GetMemoryUsage(ICrySizer *pSizer) const;
 	void GetInternalMemoryUsage(ICrySizer *pSizer) const;
@@ -494,7 +479,7 @@ public:
 	void ReadMountedProperties(IScriptTable* pScriptTable);
 
 	// accessories
-	virtual void RemoveAccessory(const ItemString& name) { CRY_ASSERT_MESSAGE(0, "DEPRECATED: Use RemoveAccessory(const IEntityClass* pClass)"); };
+	virtual void RemoveAccessory(const ItemString& name) { CRY_ASSERT(0, "DEPRECATED: Use RemoveAccessory(const IEntityClass* pClass)"); };
 	virtual void RemoveAllAccessories();
 	virtual void DetachAllAccessories();
 	virtual void AttachAccessory(const ItemString& name, bool attach, bool noanim, bool force = false, bool firstTimeAttached = false, bool initialLoadoutSetup = false);
@@ -900,6 +885,3 @@ public:
 	static SItemFragmentTagCRCs sFragmentTagCRCs;
 	static SItemActionParamCRCs  sActionParamCRCs;
 };
-
-
-#endif //__ITEM_H__

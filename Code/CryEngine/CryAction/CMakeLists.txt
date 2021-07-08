@@ -24,31 +24,6 @@ add_sources("CryAction_animgraph_uber.cpp"
 		"AnimationGraph/AnimationTrigger.h"
 )
 
-add_sources("CryAction_dialogsystem_uber.cpp"
-	PROJECTS CryAction
-	SOURCE_GROUP "Dialog System"
-		"DialogSystem/DialogActorContext.cpp"
-		"DialogSystem/DialogLoader.cpp"
-		"DialogSystem/DialogLoaderMK2.cpp"
-		"DialogSystem/DialogScript.cpp"
-		"DialogSystem/DialogSession.cpp"
-		"DialogSystem/DialogSystem.cpp"
-		"DialogSystem/ScriptBind_DialogSystem.cpp"
-		"SubtitleManager.cpp"
-		"DialogSystem/DialogActorContext.h"
-		"DialogSystem/DialogCommon.h"
-		"DialogSystem/DialogLoader.h"
-		"DialogSystem/DialogLoaderMK2.h"
-		"DialogSystem/DialogScript.h"
-		"DialogSystem/DialogSession.h"
-		"DialogSystem/DialogSystem.h"
-		"DialogSystem/ScriptBind_DialogSystem.h"
-		"SubtitleManager.h"
-		"DialogSystem/DialogQueuesManager.h"
-		"DialogSystem/DialogQueuesManager.cpp"
-		"DialogSystem/FlowDialogNode.cpp"
-)
-
 add_sources("CryAction_flashui_uber.cpp"
 	PROJECTS CryAction
 	SOURCE_GROUP "FlashUI"
@@ -73,6 +48,7 @@ add_sources("CryAction_flashui_uber.cpp"
 		"FlashUI/FlashUIBaseNode.h"
 		"FlashUI/FlashUIDisplayNodes.h"
 		"FlashUI/FlashUIElement.h"
+		"FlashUI/FlashUIFlowNodeFactory.h"
 		"FlashUI/FlashUIElementNodes.h"
 		"FlashUI/FlashUIEventNodes.h"
 		"FlashUI/FlashUIEventSystem.h"
@@ -83,6 +59,9 @@ add_sources("CryAction_flashui_uber.cpp"
 add_sources("CryAction_flowsystem_uber.cpp"
 	PROJECTS CryAction
 	SOURCE_GROUP "Flow System\\\\Nodes"
+		"FlowSystem/Nodes/FlowEngineCustomNodes.cpp"
+		"FlowSystem/Nodes/FlowEntityCustomNodes.h"
+		"FlowSystem/Nodes/FlowEntityCustomNodes.cpp"
 		"FlowSystem/Nodes/FlowGameNodes.cpp"
 		"FlowSystem/Nodes/FlowWeaponNodes.cpp"
 		"FlowSystem/Nodes/FlowInventoryNodes.cpp"
@@ -204,7 +183,6 @@ add_sources("CryAction_main_uber_1.cpp"
 		"IEffectSystem.h"
 		"ActionGame.cpp"
 		"ScriptBind_Action.cpp"
-		"AIFaceManager.cpp"
 		"CallbackTimer.cpp"
 		"CryAction.cpp"
 		"CryAction_RMI.cpp"
@@ -213,7 +191,6 @@ add_sources("CryAction_main_uber_1.cpp"
 		"Main.cpp"
 		"TimeOfDayScheduler.cpp"
 		"ActionGame.h"
-		"AIFaceManager.h"
 		"CallbackTimer.h"
 		"CompositeData.h"
 		"CryAction.h"
@@ -232,11 +209,8 @@ add_sources("CryAction_main_uber_2.cpp"
 		"EntityTags.cpp"
 		"PersistantDebug.cpp"
 		"PersistantDebug.h"
-		"ManualFrameStep.cpp"
-		"ManualFrameStep.h"
 	SOURCE_GROUP "Graphics"
 		"ColorGradientManager.cpp"
-		"ColorGradientManager.h"
 	SOURCE_GROUP "Level Files"
 		"LevelSystem.cpp"
 		"LevelSystem.h"
@@ -277,25 +251,11 @@ add_sources("CryAction_main_uber_3.cpp"
 		"CustomActions/CustomActionManager.cpp"
 		"CustomActions/CustomAction.h"
 		"CustomActions/CustomActionManager.h"
-	SOURCE_GROUP "Range Signaling"
-		"RangeSignalingSystem/AngleAlert.cpp"
-		"RangeSignalingSystem/PersonalRangeSignaling.cpp"
-		"RangeSignalingSystem/Range.cpp"
-		"RangeSignalingSystem/RangeSignaling.cpp"
-		"RangeSignalingSystem/AngleAlert.h"
-		"RangeSignalingSystem/PersonalRangeSignaling.h"
-		"RangeSignalingSystem/Range.h"
-		"RangeSignalingSystem/RangeSignaling.h"
 	SOURCE_GROUP "Remote Control"
 		"RemoteControl/RConClientListener.cpp"
 		"RemoteControl/RConServerListener.cpp"
 		"RemoteControl/RConClientListener.h"
 		"RemoteControl/RConServerListener.h"
-	SOURCE_GROUP "Signal Timers"
-		"SignalTimers/PersonalSignalTimer.cpp"
-		"SignalTimers/SignalTimers.cpp"
-		"SignalTimers/PersonalSignalTimer.h"
-		"SignalTimers/SignalTimers.h"
 	SOURCE_GROUP "Simple HTTP Server"
 		"SimpleHttpServer/SimpleHttpServerListener.cpp"
 		"SimpleHttpServer/SimpleHttpServerListener.h"
@@ -318,20 +278,10 @@ add_sources("CryAction_main_uber_3.cpp"
 add_sources("CryAction_main_uber_4.cpp"
 	PROJECTS CryAction
 	SOURCE_GROUP "AI Files"
-		"AIDebugRenderer.cpp"
-		"AI/AIGroupProxy.cpp"
-		"AIHandler.cpp"
-		"AIProxy.cpp"
-		"AI/AIProxyManager.cpp"
-		"AI/CommunicationHandler.cpp"
-		"AIDebugRenderer.h"
-		"AI/AIGroupProxy.h"
-		"AIHandler.h"
-		"AIProxy.h"
-		"AI/AIProxyManager.h"
-		"AI/CommunicationHandler.h"
 		"AI/BehaviorTreeNodes_Action.h"
 		"AI/BehaviorTreeNodes_Action.cpp"
+		"AIDebugRenderer.h"
+		"AIDebugRenderer.cpp"
 	SOURCE_GROUP "EffectSystem"
 		"EffectSystem/BloodSplats.h"
 		"EffectSystem/BloodSplats.cpp"
@@ -355,11 +305,6 @@ add_sources("CryAction_main_uber_4.cpp"
 	SOURCE_GROUP "Root"
 		"RuntimeAreas.h"
 		"RuntimeAreas.cpp"
-	SOURCE_GROUP "SegmentedWorld"
-		"SegmentedWorld/SegmentNode.h"
-		"SegmentedWorld/SegmentNode.cpp"
-		"SegmentedWorld/SegmentedWorld.h"
-		"SegmentedWorld/SegmentedWorld.cpp"
 	SOURCE_GROUP "SharedParams"
 		"SharedParams/SharedParamsManager.cpp"
 		"SharedParams/ISharedParams.h"
@@ -854,7 +799,6 @@ add_sources("NoUberFile"
 		"ISaveGame.h"
 		"ISharedParamsManager.h"
 		"ISubtitleManager.h"
-		"ITimeDemoRecorder.h"
 		"IUIDraw.h"
 		"IVehicleSystem.h"
 		"IViewSystem.h"
@@ -888,17 +832,61 @@ end_sources()
 
 CryEngineModule(CryAction PCH "StdAfx.cpp" SOLUTION_FOLDER "CryEngine")
 
-
-target_link_libraries( ${THIS_PROJECT} PRIVATE md5)
-if (WIN32 OR WIN64)
+target_link_libraries(${THIS_PROJECT} PRIVATE md5)
+if (WINDOWS)
 	target_link_libraries(${THIS_PROJECT} PRIVATE Shell32)
 endif()
 if(DURANGO)
 	target_link_libraries(${THIS_PROJECT} PRIVATE jsmn)
 endif()
 
-target_include_directories(CryAction INTERFACE $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}> $<INSTALL_INTERFACE:include/CryAction>)
+target_include_directories(${THIS_PROJECT} INTERFACE "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}>" "$<INSTALL_INTERFACE:include/CryAction>")
+
+# Remove once we've switched to entity components
+target_include_directories(${THIS_PROJECT} PRIVATE "${CRYENGINE_DIR}/Code/CryPlugins/CryDefaultEntities/Module")
 
 install(DIRECTORY . DESTINATION include/CryAction FILES_MATCHING PATTERN "*.h")
 install(DIRECTORY . DESTINATION include/CryAction FILES_MATCHING PATTERN "*.hpp")
 
+if (ORBIS OR CMAKE_CXX_COMPILER_ID STREQUAL "Clang")
+	target_compile_options(${THIS_PROJECT} PRIVATE
+		-Wno-parentheses
+		-Wno-reorder
+		-Wno-unknown-pragmas
+		-Wno-format
+		-Wno-switch
+		-Wno-comment
+		-Wno-unused-private-field
+		-Wno-empty-body
+		-Wno-multichar
+		-Wno-unused-value
+		-Wno-null-conversion
+		-Wno-unused-function
+		-Wno-c++11-narrowing
+		-Wno-char-subscripts
+		-Wno-overloaded-virtual
+	)
+elseif(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+	target_compile_options(${THIS_PROJECT} PRIVATE
+		-Wno-unused-function
+		-Wno-unused-value
+		-Wno-sign-compare
+		-Wno-ignored-attributes
+		-Wno-int-in-bool-context
+		-Wno-unused-but-set-variable
+		-Wno-misleading-indentation
+		-Wno-unknown-pragmas
+		-Wno-strict-aliasing
+		-Wno-maybe-uninitialized
+		-Wno-unused-const-variable
+		-Wno-multichar
+		-Wno-char-subscripts
+		-Wno-parentheses
+		-Wno-unused-result
+		-Wno-uninitialized
+		-Wno-comment
+		-Wno-address
+		-Wno-format
+		-Wno-switch
+	)
+endif()

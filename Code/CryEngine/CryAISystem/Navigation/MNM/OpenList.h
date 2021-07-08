@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 // -------------------------------------------------------------------------
 //  File name:   OpenList.h
@@ -28,9 +28,9 @@ public:
 
 	ElementNode PopBestElement()
 	{
-		//FUNCTION_PROFILER(gEnv->pSystem, PROFILE_AI);
+		//CRY_PROFILE_FUNCTION(PROFILE_AI);
 
-		CRY_ASSERT_MESSAGE(!openElements.empty(), "PopBestElement has been requested for an empty ElementNode open list.");
+		CRY_ASSERT(!openElements.empty(), "PopBestElement has been requested for an empty ElementNode open list.");
 		BestNodePredicate predicate;
 		typename ElementList::iterator bestElementIt = std::min_element(openElements.begin(), openElements.end(), predicate);
 		ElementNode bestElement = *bestElementIt;
@@ -52,7 +52,7 @@ public:
 
 	ILINE void InsertElement(const ElementNode& newElement)
 	{
-		//FUNCTION_PROFILER(gEnv->pSystem, PROFILE_AI);
+		//CRY_PROFILE_FUNCTION(PROFILE_AI);
 
 		assert(!stl::find(openElements, newElement));
 		stl::push_back_unique(openElements, newElement);

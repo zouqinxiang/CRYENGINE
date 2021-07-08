@@ -1,5 +1,4 @@
-// CRYENGINE Source Code File
-// Copyright 2001-2015 Crytek GmbH. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "Common.cfi"
 #include "ShadeLib.cfi"
@@ -27,16 +26,16 @@ float Script : STANDARDSGLOBAL
 
 struct pixoutPOM
 {
-  float4 Color0 : COLOR0;
-  float4 Color1 : COLOR1;
+  float4 Color0 : SV_Target0;
+  float4 Color1 : SV_Target1;
 };
 
 struct pixoutSnow
 {
-	float4 Normals  : COLOR0;
-	float4 Diffuse  : COLOR1;
-	float4 Specular : COLOR2;
-	float4 Blending : COLOR3;
+	float4 Normals  : SV_Target0;
+	float4 Diffuse  : SV_Target1;
+	float4 Specular : SV_Target2;
+	float4 Blending : SV_Target3;
 };
 
 //////////////////////////////////////////////////////////////////////////////////////////////
@@ -77,7 +76,7 @@ Texture2D snowSpatterTex : register(t5) = "%ENGINE%/EngineAssets/Textures/Frozen
 Texture2D frostBubblesBumpTex : register(t6) = "%ENGINE%/EngineAssets/Textures/Frozen/frost_noise4.tif";
 Texture2D snowFrostBumpTex : register(t7) = "%ENGINE%/EngineAssets/Textures/Frozen/frost_noise3.dds";
 Texture3D volumeNoiseTex : register(t8) = "%ENGINE%/EngineAssets/Textures/noise3d.dds";
-Texture2D snowOcclusionTex : register(t9) = $RainOcclusion;
+Texture2D<float> snowOcclusionTex : register(t9) = $RainOcclusion;
 
 SamplerState pointClampSampler : register(s0) = SS_PointClamp;
 SamplerState trilinearWrapSampler : register(s1) = SS_TrilinearWrap;

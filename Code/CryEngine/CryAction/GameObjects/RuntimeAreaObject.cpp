@@ -1,7 +1,8 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "RuntimeAreaObject.h"
+#include <Cry3DEngine/ISurfaceType.h>
 
 CRuntimeAreaObject::TAudioControlMap CRuntimeAreaObject::m_audioControls;
 
@@ -28,7 +29,7 @@ bool CRuntimeAreaObject::ReloadExtension(IGameObject* pGameObject, const SEntity
 {
 	ResetGameObject();
 
-	CRY_ASSERT_MESSAGE(false, "CRuntimeAreaObject::ReloadExtension not implemented");
+	CRY_ASSERT(false, "CRuntimeAreaObject::ReloadExtension not implemented");
 
 	return false;
 }
@@ -36,13 +37,13 @@ bool CRuntimeAreaObject::ReloadExtension(IGameObject* pGameObject, const SEntity
 ///////////////////////////////////////////////////////////////////////////
 bool CRuntimeAreaObject::NetSerialize(TSerialize ser, EEntityAspects aspect, uint8 profile, int flags)
 {
-	CRY_ASSERT_MESSAGE(false, "CRuntimeAreaObject::NetSerialize not implemented");
+	CRY_ASSERT(false, "CRuntimeAreaObject::NetSerialize not implemented");
 
 	return false;
 }
 
 ///////////////////////////////////////////////////////////////////////////
-void CRuntimeAreaObject::ProcessEvent(SEntityEvent& entityEvent)
+void CRuntimeAreaObject::ProcessEvent(const SEntityEvent& entityEvent)
 {
 	switch (entityEvent.event)
 	{
@@ -93,6 +94,12 @@ void CRuntimeAreaObject::ProcessEvent(SEntityEvent& entityEvent)
 			break;
 		}
 	}
+}
+
+///////////////////////////////////////////////////////////////////////////
+Cry::Entity::EventFlags CRuntimeAreaObject::GetEventMask() const
+{
+	return ENTITY_EVENT_ENTERAREA | ENTITY_EVENT_LEAVEAREA | ENTITY_EVENT_MOVEINSIDEAREA;
 }
 
 ///////////////////////////////////////////////////////////////////////////

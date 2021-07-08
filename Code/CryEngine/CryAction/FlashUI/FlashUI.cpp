@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "FlashUI.h"
@@ -12,6 +12,8 @@
 #include <CryString/StringUtils.h>
 #include <CrySystem/VR/IHMDManager.h>
 #include <CryRenderer/IStereoRenderer.h>
+#include <CryRenderer/IScaleform.h>
+#include <CryRenderer/IRenderAuxGeom.h>
 #include <CrySystem/Scaleform/IScaleformHelper.h>
 
 #define FLASH_UIELEMENTS_FOLDER "UIElements"
@@ -100,7 +102,7 @@ CFlashUI::CFlashUI()
 //-------------------------------------------------------------------
 void CFlashUI::Init()
 {
-	LOADING_TIME_PROFILE_SECTION;
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 	if (CV_gfx_enabled)
 	{
 		m_pFlashUIActionEvents = new CFlashUIActionEvents();
@@ -113,7 +115,7 @@ void CFlashUI::Init()
 //-------------------------------------------------------------------
 bool CFlashUI::PostInit()
 {
-	LOADING_TIME_PROFILE_SECTION;
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 	bool res = true;
 
 	if (CV_gfx_enabled)
@@ -135,7 +137,6 @@ bool CFlashUI::PostInit()
 			notifier->Init();
 
 		PreloadTextures();
-		gEnv->pRenderer->InitSystemResources(FRR_SYSTEM_RESOURCES);
 	}
 	return res;
 }
@@ -166,30 +167,32 @@ void CFlashUI::Shutdown()
 
 	SAFE_DELETE(m_pUIActionManager);
 	SAFE_DELETE(m_pFlashUIActionEvents);
+
+	gEnv->pFlashUI = nullptr;
 }
 
 //------------------------------------------------------------------------------------
 void CFlashUI::RegisterListeners()
 {
-	CRY_ASSERT_MESSAGE(gEnv->pHardwareMouse && gEnv->pInput, "Unable to register as input listener!");
+	CRY_ASSERT(gEnv->pHardwareMouse && gEnv->pInput, "Unable to register as input listener!");
 	if (gEnv->pHardwareMouse && gEnv->pInput)
 	{
 		gEnv->pHardwareMouse->AddListener(this);
 		gEnv->pInput->AddEventListener(this);
 	}
 
-	CRY_ASSERT_MESSAGE(gEnv->pGameFramework, "Unable to register as Framework listener!");
+	CRY_ASSERT(gEnv->pGameFramework, "Unable to register as Framework listener!");
 	if (gEnv->pGameFramework)
 	{
 		gEnv->pGameFramework->RegisterListener(this, "FlashUI", FRAMEWORKLISTENERPRIORITY_HUD);
-		CRY_ASSERT_MESSAGE(gEnv->pGameFramework->GetILevelSystem(), "Unable to register as levelsystem listener!");
+		CRY_ASSERT(gEnv->pGameFramework->GetILevelSystem(), "Unable to register as levelsystem listener!");
 		if (gEnv->pGameFramework->GetILevelSystem())
 		{
 			gEnv->pGameFramework->GetILevelSystem()->AddListener(this);
 		}
 	}
 
-	CRY_ASSERT_MESSAGE(gEnv->pSystem, "Unable to register as system listener!");
+	CRY_ASSERT(gEnv->pSystem, "Unable to register as system listener!");
 	if (gEnv->pSystem)
 	{
 		gEnv->pSystem->GetISystemEventDispatcher()->RegisterListener(this, "CFlashUI");
@@ -221,7 +224,7 @@ void CFlashUI::UnregisterListeners()
 //------------------------------------------------------------------------------------
 void CFlashUI::Reload()
 {
-	LOADING_TIME_PROFILE_SECTION;
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 	UIACTION_LOG("FlashUI reload start");
 
 	ReloadAllBootStrapper();
@@ -263,7 +266,7 @@ void CFlashUI::ReloadAll()
 //-------------------------------------------------------------------
 void CFlashUI::Update(float fDeltaTime)
 {
-	FUNCTION_PROFILER(GetISystem(), PROFILE_ACTION);
+	CRY_PROFILE_FUNCTION(PROFILE_ACTION);
 
 	if (m_bLoadtimeThread)
 		return;
@@ -272,7 +275,6 @@ void CFlashUI::Update(float fDeltaTime)
 
 	if (!isEditor || gEnv->pGameFramework->IsGameStarted())
 	{
-
 		if (CV_gfx_reloadonlanguagechange == 1)
 			CheckLanguageChanged();
 
@@ -371,7 +373,7 @@ void CFlashUI::UpdateSortedElements()
 //------------------------------------------------------------------------------------
 void CFlashUI::OnSystemEvent(ESystemEvent event, UINT_PTR wparam, UINT_PTR lparam)
 {
-	LOADING_TIME_PROFILE_SECTION;
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 	switch (event)
 	{
 	case ESYSTEM_EVENT_GAME_POST_INIT_DONE:
@@ -468,7 +470,6 @@ void CFlashUI::OnSystemEvent(ESystemEvent event, UINT_PTR wparam, UINT_PTR lpara
 			if (m_systemState == eSS_Unloading)
 			{
 				StopRenderThread();
-				gEnv->pRenderer->InitSystemResources(FRR_SYSTEM_RESOURCES);
 				PreloadTextures();
 
 				m_pFlashUIActionEvents->OnUnloadComplete();
@@ -569,7 +570,9 @@ void CFlashUI::OnLoadingProgress(ILevelInfo* pLevel, int progressAmount)
 			gEnv->pRenderer->EF_Query(EFQ_RecurseLevel, nRecursionLevel);
 			const bool bStandAlone = (nRecursionLevel <= 0);
 			if (bStandAlone)
-				gEnv->pSystem->RenderBegin();
+			{
+				gEnv->pSystem->RenderBegin(SDisplayContextKey{}, SGraphicsPipelineKey::BaseGraphicsPipelineKey);
+			}
 
 			const float currTime = gEnv->pTimer->GetAsyncCurTime();
 			OnPostUpdate(currTime - m_fLastAdvance);
@@ -586,15 +589,10 @@ void CFlashUI::OnLoadingProgress(ILevelInfo* pLevel, int progressAmount)
 //------------------------------------------------------------------------------------
 void CFlashUI::LoadtimeUpdate(float fDeltaTime)
 {
-	LOADING_TIME_PROFILE_SECTION
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY)
 
 	if (m_bSortedElementsInvalidated)
 	{
-		for (TPlayerList::const_iterator it = m_loadtimePlayerList.begin(); it != m_loadtimePlayerList.end(); ++it)
-		{
-			IFlashPlayer* pPlayer = *it;
-			pPlayer->Release();
-		}
 		m_loadtimePlayerList.clear();
 
 		for (TUIElementsLookup::iterator iter = m_elements.begin(); iter != m_elements.end(); ++iter)
@@ -603,11 +601,7 @@ void CFlashUI::LoadtimeUpdate(float fDeltaTime)
 			while (IUIElement* pInstance = instances->Next())
 			{
 				if (pInstance->IsVisible())
-				{
-					IFlashPlayer* pPlayer = pInstance->GetFlashPlayer();
-					pPlayer->AddRef();
-					m_loadtimePlayerList.push_back(pPlayer);
-				}
+					m_loadtimePlayerList.emplace_back(pInstance->GetFlashPlayer());
 			}
 		}
 
@@ -618,33 +612,32 @@ void CFlashUI::LoadtimeUpdate(float fDeltaTime)
 	{
 		(*it)->Advance(fDeltaTime);
 	}
-
-	if (IHmdManager* pHmdManager = gEnv->pSystem->GetHmdManager())
-	{
-		pHmdManager->UpdateTracking(eVRComponent_Hmd);
-	}
 }
 
 //------------------------------------------------------------------------------------
 void CFlashUI::LoadtimeRender()
 {
-	LOADING_TIME_PROFILE_SECTION
-
-	gEnv->pRenderer->ClearTargetsImmediately(FRT_CLEAR);
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY)
 
 	if (CV_gfx_draw == 1)
 	{
-		if (IStereoRenderer* pStereoRenderer = gEnv->pRenderer->GetIStereoRenderer())
+		IStereoRenderer* stereoRenderer = gEnv->pRenderer->GetIStereoRenderer();
+
+		if (stereoRenderer->GetStereoEnabled())
+			stereoRenderer->PrepareFrame();
+
+		for (auto& pFlashPlayer : m_loadtimePlayerList)
 		{
-			if (IHmdRenderer* pHmdRender = pStereoRenderer->GetIHmdRenderer())
-			{
-				pHmdRender->PrepareFrame();
-			}
+			auto p = pFlashPlayer;
+			p->SetClearFlags(FRT_CLEAR_COLOR, Clr_Transparent);
+			gEnv->pRenderer->FlashRenderPlayer(std::move(p));
 		}
 
-		for (TPlayerList::const_iterator it = m_loadtimePlayerList.begin(); it != m_loadtimePlayerList.end(); ++it)
+		if (stereoRenderer->GetStereoEnabled())
 		{
-			(*it)->Render(gEnv->pRenderer->IsStereoEnabled());
+			if (!stereoRenderer->IsMenuModeEnabled())
+				stereoRenderer->DisplaySocialScreen();
+			stereoRenderer->SubmitFrameToHMD();
 		}
 	}
 }
@@ -659,10 +652,10 @@ void CFlashUI::LoadtimeRender()
 #endif
 void CFlashUI::UpdateFG()
 {
-	LOADING_TIME_PROFILE_SECTION;
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 
 	static bool isUpdating = false;
-	CRY_ASSERT_MESSAGE(!isUpdating, "Recursive loop: trying to update UIAction FlowGraphs within update loop!");
+	CRY_ASSERT(!isUpdating, "Recursive loop: trying to update UIAction FlowGraphs within update loop!");
 	if (!isUpdating)
 	{
 		isUpdating = true;
@@ -691,7 +684,7 @@ void CFlashUI::UpdateFG()
 
 			if (++loops > 255)
 			{
-				CRY_ASSERT_MESSAGE(false, "stack constantly gets new events within this update loop, should not happen!");
+				CRY_ASSERT(false, "stack constantly gets new events within this update loop, should not happen!");
 				UIACTION_ERROR("Some UIActions are causing infinitive loop!");
 				break;
 			}
@@ -705,7 +698,7 @@ void CFlashUI::UpdateFG()
 //------------------------------------------------------------------------------------
 void CFlashUI::EnableEventStack(bool bEnable)
 {
-	CRY_ASSERT_MESSAGE(gEnv->IsEditor(), "Only allowed for editor!");
+	CRY_ASSERT(gEnv->IsEditor(), "Only allowed for editor!");
 	if (gEnv->IsEditor())
 	{
 		CUIFGStackMan::SetEnabled(bEnable);
@@ -715,14 +708,18 @@ void CFlashUI::EnableEventStack(bool bEnable)
 //------------------------------------------------------------------------------------
 void CFlashUI::RegisterModule(IUIModule* pModule, const char* name)
 {
+#if defined(USE_CRY_ASSERT)
 	const bool ok = m_modules.Add(pModule, name);
-	CRY_ASSERT_MESSAGE(ok, "Module already registered!");
+	CRY_ASSERT(ok, "Module already registered!");
+#else
+	m_modules.Add(pModule, name);
+#endif
 }
 
 //------------------------------------------------------------------------------------
 void CFlashUI::UnregisterModule(IUIModule* pModule)
 {
-	CRY_ASSERT_MESSAGE(m_modules.Contains(pModule), "Module was never registered or already unregistered!");
+	CRY_ASSERT(m_modules.Contains(pModule), "Module was never registered or already unregistered!");
 	m_modules.Remove(pModule);
 }
 
@@ -750,7 +747,7 @@ void CFlashUI::SetHudElementsVisible(bool bVisible)
 //-------------------------------------------------------------------
 void CFlashUI::OnHardwareMouseEvent(int iX, int iY, EHARDWAREMOUSEEVENT eHardwareMouseEvent, int wheelDelta)
 {
-	FUNCTION_PROFILER(GetISystem(), PROFILE_ACTION);
+	CRY_PROFILE_FUNCTION(PROFILE_ACTION);
 
 	if (gEnv->pConsole->GetStatus())   // disable UI inputs when console is open
 		return;
@@ -785,7 +782,7 @@ void CFlashUI::OnHardwareMouseEvent(int iX, int iY, EHARDWAREMOUSEEVENT eHardwar
 //-------------------------------------------------------------------
 bool CFlashUI::OnInputEvent(const SInputEvent& event)
 {
-	FUNCTION_PROFILER(GetISystem(), PROFILE_ACTION);
+	CRY_PROFILE_FUNCTION(PROFILE_ACTION);
 
 	if (gEnv->pConsole->GetStatus())   // disable UI inputs when console is open
 		return false;
@@ -831,7 +828,7 @@ bool CFlashUI::OnInputEvent(const SInputEvent& event)
 //------------------------------------------------------------------------------------
 bool CFlashUI::OnInputEventUI(const SUnicodeEvent& event)
 {
-	FUNCTION_PROFILER(GetISystem(), PROFILE_ACTION);
+	CRY_PROFILE_FUNCTION(PROFILE_ACTION);
 
 	if (gEnv->pConsole->GetStatus())   // disable UI inputs when console is open
 		return false;
@@ -1007,7 +1004,7 @@ template<EUIObjectType T> bool IsTemplate()                     { return false; 
 template<> bool                IsTemplate<eUOT_MovieClipTmpl>() { return true; }
 
 template<EUIObjectType Type, class Item>
-static void CreateMCFunctionNodes(std::vector<CFlashUiFlowNodeFactory*>& nodelist, IUIElement* pElement, Item* pItem, const string& path, bool fill = false)
+static void CreateMCFunctionNodes(CFlashUiFlowNodeFactory_AutoArray& nodelist, IUIElement* pElement, Item* pItem, const string& path, bool fill = false)
 {
 	// prevent to fill "first row"
 	if (fill)
@@ -1097,7 +1094,7 @@ void CFlashUI::CreateNodes()
 	// Do nodes registration with flow graph system
 	for (auto pNodeFactory : m_UINodes)
 	{
-		gEnv->pFlowSystem->RegisterType(pNodeFactory->GetNodeTypeName(),pNodeFactory);
+		gEnv->pFlowSystem->RegisterType(pNodeFactory->GetNodeTypeName(), pNodeFactory);
 	}
 }
 
@@ -1297,7 +1294,7 @@ void CFlashUI::LoadFromFile(const char* pFolderName, const char* pSearch, bool (
 //-------------------------------------------------------------------
 void CFlashUI::PreloadTextures(const char* pLevelName)
 {
-	LOADING_TIME_PROFILE_SECTION;
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 
 	ReleasePreloadedTextures(false);
 
@@ -1500,7 +1497,7 @@ TUIEventSystemMap* CFlashUI::GetEventSystemMap(IUIEventSystem::EEventSystemType 
 		pMap = &m_eventSystemsUiToSys;
 		break;
 	default:
-		CRY_ASSERT_MESSAGE(false, "Invalid IUIEventSystem::EEventSystemType type");
+		CRY_ASSERT(false, "Invalid IUIEventSystem::EEventSystemType type");
 	}
 	return pMap;
 }
@@ -1521,13 +1518,10 @@ void CFlashUI::StartRenderThread()
 		const TSortedElementList& activeElements = GetSortedElements();
 		for (TSortedElementList::const_iterator it = activeElements.begin(); it != activeElements.end(); ++it)
 		{
-			IFlashPlayer* pPlayer = it->second->GetFlashPlayer();
-			pPlayer->AddRef();
-			m_loadtimePlayerList.push_back(pPlayer);
+			m_loadtimePlayerList.emplace_back(it->second->GetFlashPlayer());
 		}
 		m_bLoadtimeThread = true;
 		gEnv->pCryPak->LockReadIO(true);
-		gEnv->pRenderer->InitSystemResources(FRR_SYSTEM_RESOURCES);
 		gEnv->pRenderer->StartLoadtimeFlashPlayback(this);
 		UIACTION_LOG("Loadtime Render Thread: Started");
 	}
@@ -1539,11 +1533,6 @@ void CFlashUI::StopRenderThread()
 	if (m_bLoadtimeThread == true)
 	{
 		gEnv->pRenderer->StopLoadtimeFlashPlayback();
-		for (TPlayerList::const_iterator it = m_loadtimePlayerList.begin(); it != m_loadtimePlayerList.end(); ++it)
-		{
-			IFlashPlayer* pPlayer = *it;
-			pPlayer->Release();
-		}
 		m_loadtimePlayerList.clear();
 		gEnv->pCryPak->LockReadIO(false);
 		m_bLoadtimeThread = false;
@@ -1561,11 +1550,13 @@ IUIEventSystemIteratorPtr CFlashUI::CreateEventSystemIterator(IUIEventSystem::EE
 }
 
 //-------------------------------------------------------------------
-IUIElement* CFlashUI::GetUIElementByInstanceStr(const char* sUIInstanceStr) const
+std::pair<string, int> CFlashUI::GetUIIdentifiersByInstanceStr(const char* sUIInstanceStr) const
 {
-	assert(sUIInstanceStr != NULL);
-	if (sUIInstanceStr == NULL)
-		return NULL;
+	std::pair<string, int> result = std::make_pair<string, int>("", 0);
+
+	CRY_ASSERT(sUIInstanceStr != nullptr);
+	if (sUIInstanceStr == nullptr)
+		return result;
 
 	string tmpName(sUIInstanceStr);
 	PathUtil::RemoveExtension(tmpName);
@@ -1575,9 +1566,7 @@ IUIElement* CFlashUI::GetUIElementByInstanceStr(const char* sUIInstanceStr) cons
 
 	const char* pExt = PathUtil::GetExt(sUIInstanceStr);
 	if (*pExt != '\0' && strcmpi(pExt, "ui"))
-		return NULL;
-
-	uint instanceId = 0;
+		return result;
 
 	int str_length = strlen(name);
 	int index = 0;
@@ -1589,19 +1578,39 @@ IUIElement* CFlashUI::GetUIElementByInstanceStr(const char* sUIInstanceStr) cons
 			name[index] = '\0';
 			id_index = index + 1;
 		}
+
 		index++;
 	}
+
+	result.first = name;
+
 	if (id_index != -1 && id_index < str_length)
 	{
-		instanceId = atoi(name + id_index);
+		result.second = atoi(name + id_index);
 	}
 
-	IUIElement* pElement = GetUIElement(name);
-	if (pElement)
+	return result;
+}
+
+std::pair<IUIElement*, IUIElement*> CFlashUI::GetUIElementsByInstanceStr(const char* sUIInstanceStr) const
+{
+	std::pair<IUIElement*, IUIElement*> result = std::make_pair<IUIElement*, IUIElement*>(nullptr, nullptr);
+	std::pair<string, int> identifiers = GetUIIdentifiersByInstanceStr(sUIInstanceStr);
+
+	if (identifiers.first == "")
+		return result;
+
+	if (result.second = result.first = GetUIElement(identifiers.first))
 	{
-		pElement = pElement->GetInstance(instanceId);
+		result.second = result.first->GetInstance(identifiers.second);
 	}
-	return pElement;
+
+	return result;
+}
+
+IUIElement* CFlashUI::GetUIElementByInstanceStr(const char* sUIInstanceStr) const
+{
+	return CFlashUI::GetUIElementsByInstanceStr(sUIInstanceStr).second;
 }
 
 //-------------------------------------------------------------------
@@ -1697,10 +1706,11 @@ void CFlashUI::CheckLanguageChanged()
 //------------------------------------------------------------------------------------
 void CFlashUI::CheckResolutionChange()
 {
-	int width, height, x, y;
-	if (!gEnv->IsEditor())
+	int width = 0, height = 0;
+	if (!gEnv->IsEditor() && gEnv->pRenderer)
 	{
-		gEnv->pRenderer->GetViewport(&x, &y, &width, &height);
+		width  = gEnv->pRenderer->GetOverlayWidth();
+		height = gEnv->pRenderer->GetOverlayHeight();
 	}
 	else
 	{
@@ -1735,15 +1745,15 @@ void CFlashUI::CheckResolutionChange()
 //------------------------------------------------------------------------------------
 void CFlashUI::GetScreenSize(int& width, int& height)
 {
-	CRY_ASSERT_MESSAGE(gEnv->IsEditor(), "Only allowed for editor!");
+	CRY_ASSERT(gEnv->IsEditor(), "Only allowed for editor!");
 	if (m_ScreenSizeCB)
 	{
 		m_ScreenSizeCB(width, height);
 	}
-	else
+	else if (gEnv->pRenderer)
 	{
-		int x, y;
-		gEnv->pRenderer->GetViewport(&x, &y, &width, &height);
+		width  = gEnv->pRenderer->GetOverlayWidth();
+		height = gEnv->pRenderer->GetOverlayHeight();
 	}
 }
 
@@ -1773,7 +1783,7 @@ void CFlashUI::RemoveEditorUILogEventCallback()
 //------------------------------------------------------------------------------------
 IFlashUI::EPlatformUI CFlashUI::GetCurrentPlatform()
 {
-	CRY_ASSERT_MESSAGE(gEnv->IsEditor(), "Only allowed for editor!");
+	CRY_ASSERT(gEnv->IsEditor(), "Only allowed for editor!");
 
 	if (m_plattformCallback)
 	{
@@ -1923,11 +1933,9 @@ void CFlashUI::ResetDirtyFlags()
 {
 	if (m_elements.size() > 0)
 	{
-		IFlashPlayer* flash_player = m_elements[0]->GetFlashPlayer();
+		auto flash_player = m_elements[0]->GetFlashPlayer();
 		if (flash_player)
-		{
 			flash_player->ResetDirtyFlags();
-		}
 	}
 }
 
@@ -2085,13 +2093,13 @@ void RenderDebugInfo()
 		static ITexture* pPost3DRendererTexture = NULL;
 		if (pPost3DRendererTexture == NULL)
 		{
-			pPost3DRendererTexture = gEnv->pRenderer->EF_LoadTexture("$BackBuffer");
+			pPost3DRendererTexture = gEnv->pRenderer->EF_LoadTexture("$DisplayTarget");
 		}
 
 		// Render debug view
 		if (pPost3DRendererTexture != NULL)
 		{
-			gEnv->pRenderer->Draw2dImage(0, 0, 200, 200, pPost3DRendererTexture->GetTextureID());
+			IRenderAuxImage::Draw2dImage(0, 0, 200, 200, pPost3DRendererTexture->GetTextureID());
 		}
 		/////////////////
 	}
@@ -2201,7 +2209,6 @@ void RenderStackDebugInfo(bool render, const char* label, int loop)
 		float py = 0;
 		float px = 0;
 		const int count = stacklist.size();
-		int round = 0;
 
 		colorWhite[3] = 1.f;
 		for (int i = 0; i <= count / itemsPerRow; ++i)

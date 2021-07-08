@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -89,7 +89,7 @@ public:
 	virtual const char*                        GetStyleId() const { return m_styleId.c_str(); }
 	virtual CryGraphEditor::CAbstractNodeItem& GetNodeItem() const override;
 
-	virtual QString                            GetName() const override        { return m_name; };
+	virtual QString                            GetName() const override        { return m_name; }
 	virtual QString                            GetDescription() const override { return QString(); }
 	virtual QString                            GetTypeName() const override;
 

@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
 *************************************************************************/
@@ -117,7 +117,7 @@ FlatAddr CReader::ReadFromBufferEndianAware(FlatAddr addr, T& data)
 
 inline FlatAddr CReader::GetAddrNode(NodeGlobalID id) const
 {
-	assert(id < m_numNodes);
+	CRY_ASSERT(id < m_numNodes);
 
 	FlatAddr addr = m_nodesAddrTable[id];
 	return addr;

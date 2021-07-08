@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "AnimCameraNode.h"
@@ -38,7 +38,6 @@ CAnimCameraNode::CAnimCameraNode(const int id)
 	, m_fFOV(60.0f)
 	, m_fDOF(ZERO)
 	, m_fNearZ(DEFAULT_NEAR)
-	, m_cv_r_PostProcessEffects(NULL)
 	, m_bJustActivated(false)
 	, m_cameraShakeSeedValue(0)
 {
@@ -200,7 +199,10 @@ void CAnimCameraNode::Animate(SAnimContext& animContext)
 
 		if (m_pLastFrameActiveCameraNode != this)
 		{
-			gEnv->pRenderer->EF_DisableTemporalEffects();
+			if (gEnv->pRenderer)
+			{
+				gEnv->pRenderer->EF_DisableTemporalEffects();
+			}
 			static_cast<CMovieSystem*>(gEnv->pMovieSystem)->OnCameraCut();
 		}
 
@@ -247,6 +249,13 @@ void CAnimCameraNode::Animate(SAnimContext& animContext)
 		bNodeAnimated = true;
 	}
 
+	if (bNodeAnimated && m_pOwner && !IsSkipInterpolatedCameraNodeEnabled())
+	{
+		m_bIgnoreSetParam = true;
+		m_pOwner->OnNodeAnimated(this);
+		m_bIgnoreSetParam = false;
+	}
+
 	if (pEntity)
 	{
 		Quat rotation = pEntity->GetRotation();
@@ -262,13 +271,6 @@ void CAnimCameraNode::Animate(SAnimContext& animContext)
 
 			bNodeAnimated = true;
 		}
-	}
-
-	if (bNodeAnimated && m_pOwner && !IsSkipInterpolatedCameraNodeEnabled())
-	{
-		m_bIgnoreSetParam = true;
-		m_pOwner->OnNodeAnimated(this);
-		m_bIgnoreSetParam = false;
 	}
 }
 

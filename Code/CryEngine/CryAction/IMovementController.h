@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
    -------------------------------------------------------------------------
@@ -741,7 +741,7 @@ public:
 
 	const Vec3& GetDesiredBodyDirectionAtTarget() const
 	{
-		assert(HasDesiredBodyDirectionAtTarget());
+		CRY_ASSERT(HasDesiredBodyDirectionAtTarget());
 		return m_desiredBodyDirectionAtTarget;
 	}
 

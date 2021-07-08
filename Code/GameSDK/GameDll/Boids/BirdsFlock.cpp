@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 // -------------------------------------------------------------------------
 //  File name:   birdsflock.cpp
@@ -17,6 +17,7 @@
 
 #include <CryAISystem/IAIObject.h>
 #include <IPerceptionManager.h>
+#include <IActorSystem.h>
 
 #define START_LANDING_TIME 3
 

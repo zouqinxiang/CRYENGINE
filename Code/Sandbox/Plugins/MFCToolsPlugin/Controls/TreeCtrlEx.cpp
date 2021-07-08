@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "stdafx.h"
 #include "TreeCtrlEx.h"
@@ -274,7 +274,7 @@ void CTreeCtrlEx::OnLButtonDown(UINT nFlags, CPoint point)
 
 	// Clear selection if clicking off all items
 	UINT flags;
-	HTREEITEM item = HitTest(point, &flags);
+	HitTest(point, &flags);
 	if (!(flags & TVHT_ONITEM))
 		SelectItem(NULL);
 

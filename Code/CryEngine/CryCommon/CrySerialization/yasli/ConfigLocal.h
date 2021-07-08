@@ -1,6 +1,9 @@
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
+
 #pragma once
 
 #include <CryCore/Platform/platform.h>
+#include <CryString/CryString.h>
 
 #if defined(EDITOR_COMMON_EXPORTS)
 #define PROPERTY_TREE_API __declspec(dllexport)
@@ -42,7 +45,7 @@ typedef yasli::wstring wstring;
 
 #define YASLI_ASSERT_DEFINED
 #define YASLI_ASSERT(x) CRY_ASSERT(x)
-#define YASLI_ASSERT_STR(x,str) CRY_ASSERT_MESSAGE(x,str)
+#define YASLI_ASSERT_STR(x,str) CRY_ASSERT(x,str)
 #define YASLI_ESCAPE(x, action) if(!(x)) { YASLI_ASSERT(0 && #x); action; };
 #define YASLI_CHECK(x) (x)
 

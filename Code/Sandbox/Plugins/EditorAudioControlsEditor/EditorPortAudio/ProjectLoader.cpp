@@ -1,83 +1,139 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "ProjectLoader.h"
-#include "AudioSystemControl.h"
+
+#include "Impl.h"
+#include "Utils.h"
+
 #include <CrySystem/File/CryFile.h>
 #include <CrySystem/ISystem.h>
-#include <CryString/CryPath.h>
-#include <IAudioSystemEditor.h>
-#include <IAudioSystemItem.h>
-#include <CryCore/CryCrc32.h>
-
-using namespace PathUtil;
 
 namespace ACE
 {
-
-CProjectLoader::CProjectLoader(const string& assetsPath, IAudioSystemItem& rootItem)
-	: m_assetsPath(assetsPath)
+namespace Impl
 {
-	LoadFolder("", rootItem);
+namespace PortAudio
+{
+//////////////////////////////////////////////////////////////////////////
+void SetParentPakStatus(CItem* pParent, EPakStatus const pakStatus)
+{
+	while (pParent != nullptr)
+	{
+		pParent->SetPakStatus(pParent->GetPakStatus() | pakStatus);
+		pParent = static_cast<CItem*>(pParent->GetParent());
+	}
 }
 
-void CProjectLoader::LoadFolder(const string& folderPath, IAudioSystemItem& parent)
+//////////////////////////////////////////////////////////////////////////
+CProjectLoader::CProjectLoader(string const& assetsPath, string const& localizedAssetsPath, CItem& rootItem, ItemCache& itemCache, CImpl const& impl)
+	: m_itemCache(itemCache)
+	, m_impl(impl)
+{
+	LoadFolder(assetsPath, "", false, rootItem);
+	LoadFolder(localizedAssetsPath, "", true, rootItem);
+}
+
+//////////////////////////////////////////////////////////////////////////
+void CProjectLoader::LoadFolder(string const& assetsPath, string const& folderPath, bool const isLocalized, CItem& parent)
 {
 	_finddata_t fd;
-	ICryPak* pCryPak = gEnv->pCryPak;
-	intptr_t handle = pCryPak->FindFirst(m_assetsPath + CRY_NATIVE_PATH_SEPSTR + folderPath + CRY_NATIVE_PATH_SEPSTR + "*.*", &fd);
+	ICryPak* const pCryPak = gEnv->pCryPak;
+	intptr_t const handle = pCryPak->FindFirst(assetsPath + "/" + folderPath + "/*.*", &fd);
+
 	if (handle != -1)
 	{
+		EItemFlags const flags = isLocalized ? EItemFlags::IsLocalized : EItemFlags::None;
+
 		do
 		{
-			const string name = fd.name;
-			if (name != "." && name != ".." && !name.empty())
+			string const name = fd.name;
+
+			if ((name != ".") && (name != "..") && !name.empty())
 			{
 				if (fd.attrib & _A_SUBDIR)
 				{
 					if (folderPath.empty())
 					{
-						LoadFolder(name, *CreateItem(name, folderPath, ePortAudioTypes_Folder, parent));
+						LoadFolder(assetsPath, name, isLocalized, *CreateItem(assetsPath, name, folderPath, EItemType::Folder, parent, flags));
 					}
 					else
 					{
-						LoadFolder(folderPath + CRY_NATIVE_PATH_SEPSTR + name, *CreateItem(name, folderPath, ePortAudioTypes_Folder, parent));
+						LoadFolder(assetsPath, folderPath + "/" + name, isLocalized, *CreateItem(assetsPath, name, folderPath, EItemType::Folder, parent, flags));
 					}
 				}
 				else
 				{
-					string::size_type posExtension = name.rfind('.');
+					string::size_type const posExtension = name.rfind('.');
+
 					if (posExtension != string::npos)
 					{
-						if (_stricmp(name.data() + posExtension, ".ogg") == 0
-							|| _stricmp(name.data() + posExtension, ".wav") == 0)
+						string const fileExtension = name.data() + posExtension;
+
+						if (_stricmp(fileExtension, ".wav") == 0)
 						{
 							// Create the event with the same name as the file
-							CreateItem(name, folderPath, ePortAudioTypes_Event, parent);
+							CreateItem(assetsPath, name, folderPath, EItemType::Event, parent, flags);
 						}
 					}
 				}
 			}
 		}
 		while (pCryPak->FindNext(handle, &fd) >= 0);
+
 		pCryPak->FindClose(handle);
 	}
 }
 
-IAudioSystemItem* CProjectLoader::CreateItem(const string& name, const string& path, ItemType type, IAudioSystemItem& rootItem)
+//////////////////////////////////////////////////////////////////////////
+CItem* CProjectLoader::CreateItem(string const& assetsPath, string const& name, string const& path, EItemType const type, CItem& parent, EItemFlags flags)
 {
-	CID id;
-	if (path.empty())
-	{
-		id = CCrc32::ComputeLowercase(name);
-	}
-	else
-	{
-		id = CCrc32::ComputeLowercase(path + CRY_NATIVE_PATH_SEPSTR + name);
-	}
-	IAudioSystemControl* pControl = new IAudioSystemControl(name, id, type);
-	rootItem.AddChild(pControl);
-	return pControl;
-}
+	bool const isLocalized = (flags& EItemFlags::IsLocalized) != EItemFlags::None;
+	ControlId const id = Utils::GetId(type, name, path, isLocalized);
+	auto pItem = static_cast<CItem*>(m_impl.GetItem(id));
 
+	if (pItem == nullptr)
+	{
+		string filePath = assetsPath + "/";
+
+		if (path.empty())
+		{
+			filePath += name;
+		}
+		else
+		{
+			filePath += (path + "/" + name);
+		}
+
+		EPakStatus pakStatus = EPakStatus::None;
+
+		if (gEnv->pCryPak->IsFileExist(filePath.c_str(), ICryPak::eFileLocation_InPak))
+		{
+			pakStatus |= EPakStatus::InPak;
+		}
+
+		if (gEnv->pCryPak->IsFileExist(filePath.c_str(), ICryPak::eFileLocation_OnDisk))
+		{
+			pakStatus |= EPakStatus::OnDisk;
+		}
+
+		if (type == EItemType::Event)
+		{
+			SetParentPakStatus(&parent, pakStatus);
+		}
+		else if (type == EItemType::Folder)
+		{
+			flags |= EItemFlags::IsContainer;
+		}
+
+		pItem = new CItem(name, id, type, path, flags, pakStatus, filePath);
+
+		parent.AddChild(pItem);
+		m_itemCache[id] = pItem;
+	}
+
+	return pItem;
 }
+} // namespace PortAudio
+} // namespace Impl
+} // namespace ACE

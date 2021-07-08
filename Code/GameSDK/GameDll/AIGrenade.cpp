@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
 -------------------------------------------------------------------------
@@ -56,7 +56,7 @@ struct CAIGrenade::FinishGrenadeAction
 //-------------------------------------------------------------------------
 void CAIGrenade::StartFire()
 {
-	CRY_ASSERT_MESSAGE(false, "CAIGrenade::StartFire Called without launch params, ignoring");
+	CRY_ASSERT(false, "CAIGrenade::StartFire Called without launch params, ignoring");
 }
 
 //-------------------------------------------------------------------------
@@ -132,7 +132,7 @@ void CAIGrenade::SetFiringPos(const char* boneName)
 			}
 		}
 	}
-	CRY_ASSERT_MESSAGE(false, "CAIGrenade::SetFiringPos - Failed to get the position of the bone");
+	CRY_ASSERT(false, "CAIGrenade::SetFiringPos - Failed to get the position of the bone");
  	m_grenadeLaunchPosition.zero();
 }
 

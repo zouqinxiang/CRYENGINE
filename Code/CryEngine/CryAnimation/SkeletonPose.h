@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -63,13 +63,12 @@ public:
 	virtual const QuatT& GetAbsJointByID(int32 index) const override
 	{
 		const Skeleton::CPoseData& poseData = GetPoseData();
-		if (index >= 0 && (uint32)index < poseData.GetJointCount())
+		if (CRY_VERIFY(index >= 0 && (uint32)index < poseData.GetJointCount()))
 		{
 			return poseData.GetJointAbsolute(index);
 		}
 		else
 		{
-			assert(false);
 			return g_IdentityQuatT;
 		}
 	}
@@ -77,13 +76,12 @@ public:
 	virtual const QuatT& GetRelJointByID(int32 index) const override
 	{
 		const Skeleton::CPoseData& poseData = GetPoseData();
-		if (index >= 0 && (uint32)index < poseData.GetJointCount())
+		if (CRY_VERIFY(index >= 0 && (uint32)index < poseData.GetJointCount()))
 		{
 			return poseData.GetJointRelative(index);
 		}
 		else
 		{
-			assert(false);
 			return g_IdentityQuatT;
 		}
 	}
@@ -91,13 +89,12 @@ public:
 	virtual Diag33 GetAbsJointScalingByID(int32 index) const override
 	{
 		const Skeleton::CPoseData& poseData = GetPoseData();
-		if (index >= 0 && (uint32)index < poseData.GetJointCount())
+		if (CRY_VERIFY(index >= 0 && (uint32)index < poseData.GetJointCount()))
 		{
 			return poseData.GetJointAbsoluteS(index);
 		}
 		else
 		{
-			assert(false);
 			return Diag33(1.0);
 		}
 	}
@@ -105,13 +102,12 @@ public:
 	virtual Diag33 GetRelJointScalingByID(int32 index) const override
 	{
 		const Skeleton::CPoseData& poseData = GetPoseData();
-		if (index >= 0 && (uint32)index < poseData.GetJointCount())
+		if (CRY_VERIFY(index >= 0 && (uint32)index < poseData.GetJointCount()))
 		{
 			return poseData.GetJointRelativeS(index);
 		}
 		else
 		{
-			assert(false);
 			return Diag33(1.0);
 		}
 	}
@@ -227,7 +223,7 @@ public:
 	bool                     SetJointPhysProperties_ROPE(uint32 jointIndex, int nLod, const DynArray<SJointProperty>& props) override                                                                               { return m_physics.SetJointPhysProperties_ROPE(jointIndex, nLod, props); }
 
 	float GetExtent(EGeomForm eForm);
-	void GetRandomPos(PosNorm & ran, CRndGen & seed, EGeomForm eForm) const;
+	void GetRandomPoints(Array<PosNorm> points, CRndGen& seed, EGeomForm eForm) const;
 
 	CSkeletonPhysics m_physics;
 
@@ -260,6 +256,7 @@ public:
 
 	bool m_bInstanceVisible : 1;
 	bool m_bFullSkeletonUpdate : 1;
+	bool m_bVisibleLastFrame : 1;
 	uint32 m_bAllNodesValid : 1; //True if this animation was already played once.
 	bool m_bSetDefaultPoseExecute : 1;
 

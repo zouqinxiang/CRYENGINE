@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "stdafx.h"
 #include "InPlaceComboBox.h"
@@ -44,7 +44,6 @@ BOOL CInPlaceCBEdit::PreTranslateMessage(MSG* pMsg)
 		default:
 			pOwner->SendMessage(WM_USER_ON_EDITKEYDOWN, nChar);
 			return TRUE;
-			;
 		}
 	}
 	else if (pMsg->message == WM_LBUTTONDOWN)
@@ -173,7 +172,6 @@ int CInPlaceCBListBox::SetCurSel(int nPos)
 	// Check if we have autoscrolled
 	//if( m_nLastTopIdx != GetTopIndex() )
 	{
-		int nDiff = m_nLastTopIdx - GetTopIndex();
 		m_nLastTopIdx = GetTopIndex();
 
 		SCROLLINFO info;
@@ -331,9 +329,6 @@ void CInPlaceCBScrollBar::VScroll(UINT nSBCode, UINT nPos)
 {
 	if (!m_pListBox)
 		return;
-
-	int nTop = m_pListBox->GetTopIndex();
-	int nBottom = m_pListBox->GetBottomIndex();
 
 	SCROLLINFO info;
 

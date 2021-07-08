@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 
@@ -68,9 +68,6 @@ public:
 			ActivateOutput(activationInfo, EOP_CurrentHUDDistance, gEnv->pConsole->GetCVar("r_StereoHudScreenDist")->GetFVal());
 			ActivateOutput(activationInfo, EOP_Flipped, gEnv->pConsole->GetCVar("r_StereoFlipEyes")->GetIVal() != 0);
 
-			bool test = gEnv->pConsole->GetCVar("r_StereoFlipEyes")->GetIVal() != 0;
-			float v = gEnv->pConsole->GetCVar("r_StereoEyeDist")->GetFVal();
-			int x = 0;
 			break;
 		}
 	}

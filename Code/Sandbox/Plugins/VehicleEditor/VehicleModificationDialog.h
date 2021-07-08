@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 class CVehicleModificationDialog : public CDialog
 {
@@ -93,8 +93,7 @@ BOOL CVehicleModificationDialog::OnInitDialog()
 	WINDOWPLACEMENT wp;
 	GetWindowPlacement(&wp);
 
-	int width = wp.rcNormalPosition.right - wp.rcNormalPosition.left;
-	int height = wp.rcNormalPosition.bottom - wp.rcNormalPosition.top;
+	//int width = wp.rcNormalPosition.right - wp.rcNormalPosition.left;
 
 	CWnd* wnd;
 

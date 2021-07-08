@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 // -------------------------------------------------------------------------
 //  Created:     08/04/2010 by Will W (based on work by Matthew J)
@@ -76,7 +76,7 @@ void CCodeCheckpointMgr::RegisterCheckpoint(CCodeCheckpoint* pCheckpoint)
 		}
 
 		// Ensure duplicate code checkpoints are renamed
-		CRY_ASSERT_TRACE(oldRec.m_pCheckpoint == NULL, ("Duplicate CODECHECKPOINT(\"%s\") found. Please rename!", pCheckpoint->Name()));
+		CRY_ASSERT(oldRec.m_pCheckpoint == NULL, "Duplicate CODECHECKPOINT(\"%s\") found. Please rename!", pCheckpoint->Name());
 	}
 }
 

@@ -1,12 +1,12 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
+#include "MFCToolsDefines.h"
 #include <QObject>
-
 #include <CrySerialization/Forward.h>
 using Serialization::IArchive;
-class QPropertyTree;
+class QPropertyTreeLegacy;
 class CMFCPropertyTree;
 
 class CMFCPropertyTreeSignalHandler : public QObject
@@ -27,7 +27,7 @@ private:
 	CMFCPropertyTree* m_propertyTree;
 };
 
-class PLUGIN_API CMFCPropertyTree : public CWnd
+class MFC_TOOLS_PLUGIN_API CMFCPropertyTree : public CWnd
 {
 	DECLARE_DYNCREATE(CMFCPropertyTree)
 public:
@@ -63,7 +63,7 @@ protected:
 
 private:
 	friend class CMFCPropertyTreeSignalHandler;
-	QPropertyTree*                 m_propertyTree;
+	QPropertyTreeLegacy*                 m_propertyTree;
 	CMFCPropertyTreeSignalHandler* m_signalHandler;
 	Functor0                       m_sizeChangeCallback;
 	Functor0                       m_propertyChangeCallback;

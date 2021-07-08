@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 
@@ -31,7 +31,6 @@ CSmartObjectHelperObject::CSmartObjectHelperObject()
 CSmartObjectHelperObject::~CSmartObjectHelperObject()
 {
 }
-
 
 //////////////////////////////////////////////////////////////////////////
 void CSmartObjectHelperObject::UpdateVarFromObject()
@@ -72,7 +71,7 @@ void CSmartObjectHelperObject::Done()
 //////////////////////////////////////////////////////////////////////////
 bool CSmartObjectHelperObject::Init(CBaseObject* prev, const string& file)
 {
-	SetColor(RGB(255, 255, 0));
+	SetColor(ColorB(255, 255, 0));
 	return CBaseObject::Init(prev, file);
 }
 
@@ -102,10 +101,11 @@ bool CSmartObjectHelperObject::HitTest(HitContext& hc)
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CSmartObjectHelperObject::Display(DisplayContext& dc)
+void CSmartObjectHelperObject::Display(CObjectRenderHelper& objRenderHelper)
 {
-	COLORREF color = GetColor();
-	float radius = RADIUS;
+	COLORREF color = CMFCUtils::ColorBToColorRef(GetColor());
+	//float radius = RADIUS;
+	SDisplayContext& dc = objRenderHelper.GetDisplayContextRef();
 
 	//dc.SetColor( color, 0.5f );
 	//dc.DrawBall( GetPos(), radius );
@@ -116,7 +116,7 @@ void CSmartObjectHelperObject::Display(DisplayContext& dc)
 	}
 	if (!IsHighlighted())
 	{
-		//if (dc.flags & DISPLAY_2D)
+		//if (dc.display2D)
 		{
 			AABB box;
 			GetLocalBounds(box);

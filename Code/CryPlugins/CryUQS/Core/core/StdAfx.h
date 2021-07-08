@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -17,6 +17,8 @@
 #include <CrySerialization/Color.h>
 #include <CrySerialization/CryStrings.h>
 #include <CrySerialization/IArchiveHost.h>
+#include <CryThreading/CryThread.h>
+#include <CryThreading/IJobManager.h>
 
 // - redirects to g_pHub->HaveConsistencyChecksBeenDoneAlready()
 // - CFactoryDatabase<>::RegisterFactory() doesn't know about the global g_pHub variable yet due to the way the headers need to be included, so it uses this function instead
@@ -35,6 +37,7 @@ namespace UQS
 #include "ItemFactoryDatabase.h"
 #include "DebugRenderPrimitives.h"
 #include "DebugRenderWorld.h"
+#include "DebugMessageCollection.h"
 #include "ItemList.h"
 #include "ItemSerializationSupport.h"
 #include "LeafFunctionReturnValue.h"
@@ -43,6 +46,10 @@ namespace UQS
 #include "FunctionFactoryDatabase.h"
 #include "FunctionBlueprint.h"
 #include "FunctionCallHierarchy.h"
+#include "ScoreTransformFactory.h"
+#include "EvaluationResultTransform.h"
+#include "TextualEvaluatorBlueprint.h"
+#include "EvaluatorBlueprintBase.h"
 #include "InstantEvaluatorFactoryDatabase.h"
 #include "InstantEvaluatorBlueprint.h"
 #include "DeferredEvaluatorFactoryDatabase.h"
@@ -70,6 +77,7 @@ namespace UQS
 #include "StartupConsistencyChecker.h"
 #include "EditorService.h"
 #include "Utils.h"
+#include "SettingsManager.h"
 #if UQS_SCHEMATYC_SUPPORT
 #include "SchematycSupport.h"
 #endif

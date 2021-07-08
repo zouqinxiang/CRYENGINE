@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "GenericSelectItemDialog.h"
@@ -225,7 +225,7 @@ void CGenericSelectItemDialog::ReloadItems()
 		}
 		if (m_preselect.IsEmpty() == false)
 		{
-			int index = m_listBox.SelectString(-1, m_preselect);
+			m_listBox.SelectString(-1, m_preselect);
 			OnLbnSelchangeList();
 		}
 	}
@@ -235,7 +235,6 @@ void CGenericSelectItemDialog::ReloadItems()
 //////////////////////////////////////////////////////////////////////////
 void CGenericSelectItemDialog::OnTvnSelchangedTree(NMHDR* pNMHDR, LRESULT* pResult)
 {
-	LPNMTREEVIEW pNMTreeView = reinterpret_cast<LPNMTREEVIEW>(pNMHDR);
 	HTREEITEM hItem = m_tree.GetSelectedItem();
 	if (hItem != 0)
 	{

@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -10,15 +10,27 @@
 class CRainStage : public CGraphicsPipelineStage
 {
 public:
-	CRainStage();
+	static const EGraphicsPipelineStage StageID = eStage_Rain;
+
+	CRainStage(CGraphicsPipeline& graphicsPipeline);
 	virtual ~CRainStage();
 
-	virtual void Init() override;
-	virtual void Prepare(CRenderView* pRenderView) override;
+	bool IsStageActive(EShaderRenderingFlags flags) const final
+	{
+		return CRendererCVars::IsRainEnabled() && CRendererCVars::CV_r_PostProcess;
+	}
 
-	void         ExecuteRainPreprocess();
-	void         ExecuteDeferredRainGBuffer();
-	void         Execute();
+	void Init() final;
+	void Destroy();
+	void Update() final;
+	void OnCVarsChanged(const CCVarUpdateRecorder& cvarUpdater) final;
+
+	void ExecuteRainOcclusion();
+	void ExecuteDeferredRainGBuffer();
+	void Execute();
+
+	bool IsDeferredRainEnabled() const  { return CRendererCVars::IsRainEnabled() && gcpRendD3D->m_bDeferredRainEnabled; }
+	bool IsRainOcclusionEnabled() const { return CRendererCVars::IsRainEnabled() && gcpRendD3D->m_bDeferredRainOcclusionEnabled; }
 
 private:
 	static const int32  m_slices = 12;
@@ -26,9 +38,20 @@ private:
 	static const uint32 RainRippleTexCount = 24;
 
 private:
-	void ExecuteRainOcclusionGen(CRenderView* pRenderView);
+	void ExecuteRainOcclusionGen();
+	bool Initialized() const { return m_pSurfaceFlowTex.get() != nullptr; }
 
 private:
+	_smart_ptr<CTexture> m_pSurfaceFlowTex;
+	_smart_ptr<CTexture> m_pRainSpatterTex;
+	_smart_ptr<CTexture> m_pPuddleMaskTex;
+	_smart_ptr<CTexture> m_pHighFreqNoiseTex;
+	_smart_ptr<CTexture> m_pRainfallTex;
+	_smart_ptr<CTexture> m_pRainfallNormalTex;
+
+	std::array<_smart_ptr<CTexture>, RainRippleTexCount> m_pRainRippleTex;
+	uint32                                         m_rainRippleTexIndex = 0;
+
 	CPrimitiveRenderPass                           m_passRainOcclusionGen;
 	CStretchRectPass                               m_passCopyGBufferNormal;
 	CStretchRectPass                               m_passCopyGBufferSpecular;
@@ -43,16 +66,5 @@ private:
 	CRenderPrimitive                               m_rainPrimitives[m_maxRainLayers];
 	buffer_handle_t                                m_rainVertexBuffer = ~0u;
 
-	CTexture* m_pSurfaceFlowTex = nullptr;
-	CTexture* m_pRainSpatterTex = nullptr;
-	CTexture* m_pPuddleMaskTex = nullptr;
-	CTexture* m_pHighFreqNoiseTex = nullptr;
-	CTexture* m_pRainfallTex = nullptr;
-	CTexture* m_pRainfallNormalTex = nullptr;
-
-	std::array<CTexture*, RainRippleTexCount> m_pRainRippleTex;
-	uint32      m_rainRippleTexIndex = 0;
-
-	SRainParams m_RainVolParams;
-
+	SRainParams                                    m_RainVolParams;
 };

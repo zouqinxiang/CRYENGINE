@@ -1,23 +1,37 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
-#include <CrySystem/XML/IXml.h>
-#include "ACETypes.h"
+#include "Item.h"
 
 namespace ACE
 {
-class IAudioSystemItem;
+namespace Impl
+{
+namespace PortAudio
+{
+class CImpl;
 
-class CProjectLoader
+class CProjectLoader final
 {
 public:
-	CProjectLoader(const string& sAssetsPath, IAudioSystemItem& rootItem);
+
+	CProjectLoader() = delete;
+	CProjectLoader(CProjectLoader const&) = delete;
+	CProjectLoader(CProjectLoader&&) = delete;
+	CProjectLoader& operator=(CProjectLoader const&) = delete;
+	CProjectLoader& operator=(CProjectLoader&&) = delete;
+
+	explicit CProjectLoader(string const& assetsPath, string const& localizedAssetsPath, CItem& rootItem, ItemCache& itemCache, CImpl const& impl);
 
 private:
-	IAudioSystemItem* CreateItem(const string& name, const string& path, ItemType type, IAudioSystemItem& rootItem);
-	void              LoadFolder(const string& folderPath, IAudioSystemItem& parent);
 
-	string m_assetsPath;
+	CItem* CreateItem(string const& assetsPath, string const& name, string const& path, EItemType const type, CItem& rootItem, EItemFlags flags);
+	void   LoadFolder(string const& assetsPath, string const& folderPath, bool const isLocalized, CItem& parent);
+
+	CImpl const& m_impl;
+	ItemCache&   m_itemCache;
 };
-}
+} // namespace PortAudio
+} // namespace Impl
+} // namespace ACE

@@ -1,10 +1,10 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
 #include <NodeGraph/AbstractNodeItem.h>
 #include <NodeGraph/NodeWidget.h>
-#include <NodeGraph/NodeHeaderIconWidget.h>
+#include <NodeGraph/HeaderIconWidget.h>
 #include <NodeGraph/NodeGraphViewStyle.h>
 
 #include "GraphPinItem.h"
@@ -42,7 +42,7 @@ public:
 
 	virtual QVariant                            GetTypeId() const override;
 
-	virtual const CryGraphEditor::PinItemArray& GetPinItems() const override    { return m_pins; };
+	virtual const CryGraphEditor::PinItemArray& GetPinItems() const override    { return m_pins; }
 	virtual QString                             GetName() const override        { return m_shortName; }
 
 	virtual QString                             GetToolTipText() const override { return m_fullQualifiedName; }
@@ -54,7 +54,11 @@ public:
 	CPinItem*                    GetPinItemById(CPinId id) const;
 
 	Schematyc::IScriptGraphNode& GetScriptElement() const { return m_scriptNode; }
-	Schematyc::SGUID             GetGUID() const;
+	CryGUID                      GetGUID() const;
+
+	bool                         IsRemovable() const;
+	bool                         IsCopyAllowed() const { return true; }
+	bool                         IsPasteAllowed() const;
 
 	void                         Refresh(bool forceRefresh = false);
 
@@ -64,13 +68,14 @@ protected:
 	void Validate();
 
 private:
-	QString                      m_shortName;
-	QString                      m_fullQualifiedName;
-	CryGraphEditor::PinItemArray m_pins;
+	QString                          m_shortName;
+	QString                          m_fullQualifiedName;
+	CryGraphEditor::PinItemArray     m_pins;
 
-	Schematyc::IScriptGraphNode& m_scriptNode;
-	QColor                       m_headerTextColor;
-	bool                         m_isDirty;
+	Schematyc::IScriptGraphNode&     m_scriptNode;
+	QColor                           m_headerTextColor;
+	bool                             m_isDirty;
+	CryGraphEditor::CNodeEditorData* m_pData;
 };
 
 }

@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "GraphConnectionItem.h"
@@ -7,7 +7,7 @@
 
 #include "VariableStorage/AbstractVariableTypesModel.h"
 
-#include <Schematyc/Script/IScriptGraph.h>
+#include <CrySchematyc/Script/IScriptGraph.h>
 #include <NodeGraph/ConnectionWidget.h>
 
 #include <QColor>

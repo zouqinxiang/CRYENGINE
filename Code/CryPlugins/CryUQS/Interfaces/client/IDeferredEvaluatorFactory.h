@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -31,6 +31,8 @@ namespace UQS
 		{
 			virtual                                    ~IDeferredEvaluatorFactory() {}
 			virtual const char*                        GetName() const = 0;
+			virtual const CryGUID&                     GetGUID() const = 0;
+			virtual const char*                        GetDescription() const = 0;
 			virtual const IInputParameterRegistry&     GetInputParameterRegistry() const = 0;
 			virtual DeferredEvaluatorUniquePtr         CreateDeferredEvaluator(const void* pParams) = 0;
 			virtual void                               DestroyDeferredEvaluator(IDeferredEvaluator* pDeferredEvaluatorToDestroy) = 0;
@@ -67,7 +69,7 @@ namespace UQS
 
 			inline void CDeferredEvaluatorDeleter::operator()(IDeferredEvaluator* pDeferredEvaluatorToDelete)
 			{
-				assert(m_pDeferredEvaluatorFactory);
+				CRY_ASSERT(m_pDeferredEvaluatorFactory);
 				m_pDeferredEvaluatorFactory->DestroyDeferredEvaluator(pDeferredEvaluatorToDelete);
 			}
 

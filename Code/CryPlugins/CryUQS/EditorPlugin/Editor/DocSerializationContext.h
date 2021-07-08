@@ -1,9 +1,10 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
 #include <CrySerialization/Forward.h>
 #include <CrySerialization/StringList.h>
+#include <stack>
 
 class CUqsQueryDocument;
 class CUqsEditorContext;
@@ -26,19 +27,6 @@ public:
 		, m_paramListContextStack()
 		, m_selectedGeneratorContextStack()
 	{}
-
-	UQS::Client::IItemFactory*              GetItemFactoryByName(const SItemTypeName& typeName) const;
-	UQS::Client::IGeneratorFactory*         GetGeneratorFactoryByName(const char* szName) const;
-	UQS::Client::IFunctionFactory*          GetFunctionFactoryByName(const char* szName) const;
-	UQS::Client::IInstantEvaluatorFactory*  GetInstantEvaluatorFactoryByName(const char* szName) const;
-	UQS::Client::IDeferredEvaluatorFactory* GetDeferredEvaluatorFactoryByName(const char* szName) const;
-	UQS::Core::IQueryFactory*               GetQueryFactoryByName(const char* szName) const;
-
-	const Serialization::StringList&        GetQueryFactoryNamesList() const;
-	const Serialization::StringList&        GetItemTypeNamesList() const;
-	const Serialization::StringList&        GetGeneratorNamesList() const;
-	const Serialization::StringList&        GetFunctionNamesList(const SItemTypeName& typeToFilter) const;
-	const Serialization::StringList&        GetEvaluatorNamesList() const;
 
 	SItemTypeName                           GetItemTypeNameFromType(const UQS::Shared::CTypeInfo& typeInfo) const;
 

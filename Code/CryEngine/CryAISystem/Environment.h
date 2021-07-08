@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 // -------------------------------------------------------------------------
 //  File name:   AIEnvironment.h
@@ -20,7 +20,6 @@
 
 #include "Configuration.h"
 #include "AIConsoleVariables.h"
-#include "AISignalCRCs.h"
 
 //////////////////////////////////////////////////////////////////////////
 // AI system environment.
@@ -31,15 +30,11 @@
 class ActorLookUp;
 struct IGoalOpFactory;
 class CObjectContainer;
-class CCodeCoverageTracker;
-class CCodeCoverageManager;
-class CCodeCoverageGUI;
 class CStatsManager;
 class CTacticalPointSystem;
 class CTargetTrackManager;
 struct IAIDebugRenderer;
 class CPipeManager;
-class CGraph;
 namespace MNM
 {
 class PathfinderNavigationSystemUser;
@@ -54,19 +49,27 @@ class CCoverSystem;
 namespace BehaviorTree
 {
 class BehaviorTreeManager;
-class GraftManager;
+}
+namespace Perception
+{
+class CAuditionMap;
 }
 class CVisionMap;
 class CFactionMap;
+class CFactionSystem;
 class CGroupManager;
-class CollisionAvoidanceSystem;
+namespace Cry { namespace AI { namespace CollisionAvoidance
+{
+class CCollisionAvoidanceSystem;
+}}}
+
 class CAIObjectManager;
-class WalkabilityCacheManager;
 class NavigationSystem;
 namespace AIActionSequence {
 class SequenceManager;
 }
 class ClusterDetector;
+class CFormationManager;
 
 #ifdef CRYAISYSTEM_DEBUG
 class CAIRecorder;
@@ -75,28 +78,19 @@ struct IAIBubblesSystem;
 
 struct SAIEnvironment
 {
-	AIConsoleVars            CVars;
-	AISIGNALS_CRC            SignalCRCs;
+	SAIConsoleVars            CVars;
 
 	SConfiguration           configuration;
 
 	ActorLookUp*             pActorLookUp;
-	WalkabilityCacheManager* pWalkabilityCacheManager;
 	IGoalOpFactory*          pGoalOpFactory;
 	CObjectContainer*        pObjectContainer;
-
-#if !defined(_RELEASE)
-	CCodeCoverageTracker* pCodeCoverageTracker;
-	CCodeCoverageManager* pCodeCoverageManager;
-	CCodeCoverageGUI*     pCodeCoverageGUI;
-#endif
 
 	CStatsManager*                       pStatsManager;
 	CTacticalPointSystem*                pTacticalPointSystem;
 	CTargetTrackManager*                 pTargetTrackManager;
 	CAIObjectManager*                    pAIObjectManager;
 	CPipeManager*                        pPipeManager;
-	CGraph*                              pGraph; // superseded by NavigationSystem - remove when all links are cut
 	MNM::PathfinderNavigationSystemUser* pPathfinderNavigationSystemUser;
 	CMNMPathfinder*                      pMNMPathfinder; // superseded by NavigationSystem - remove when all links are cut
 	CNavigation*                         pNavigation;    // superseded by NavigationSystem - remove when all links are cut
@@ -107,14 +101,17 @@ struct SAIEnvironment
 	CCoverSystem*                        pCoverSystem;
 	NavigationSystem*                    pNavigationSystem;
 	BehaviorTree::BehaviorTreeManager*   pBehaviorTreeManager;
-	BehaviorTree::GraftManager*          pGraftManager;
+	Perception::CAuditionMap*            pAuditionMap;
 	CVisionMap*                          pVisionMap;
 	CFactionMap*                         pFactionMap;
+	CFactionSystem*                      pFactionSystem;
 	CGroupManager*                       pGroupManager;
-	CollisionAvoidanceSystem*            pCollisionAvoidanceSystem;
+	Cry::AI::CollisionAvoidance::CCollisionAvoidanceSystem* pCollisionAvoidanceSystem;
 	struct IMovementSystem*              pMovementSystem;
 	AIActionSequence::SequenceManager*   pSequenceManager;
 	ClusterDetector*                     pClusterDetector;
+	CFormationManager*                   pFormationManager;
+	AISignals::CSignalManager*           pSignalManager;
 
 #ifdef CRYAISYSTEM_DEBUG
 	IAIBubblesSystem* pBubblesSystem;

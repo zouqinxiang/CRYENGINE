@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "stdafx.h"
 
@@ -10,6 +10,7 @@
 #include <CrySerialization/IArchiveHost.h>
 #include <CryDynamicResponseSystem/IDynamicResponseCondition.h>
 #include <CryGame/IGameFramework.h>
+#include <CrySystem/ConsoleRegistration.h>
 
 #include "ResponseSystemDataImportHelper.h"
 #include "DialogLineDatabase.h"
@@ -19,6 +20,18 @@
 #include "VariableCollection.h"
 #include "ResponseInstance.h"
 #include "SchematycEntityDrsComponent.h"
+#include "ActionCancelSignal.h"
+#include "ActionSpeakLine.h"
+#include "ActionSetVariable.h"
+#include "ActionCopyVariable.h"
+#include "ActionExecuteResponse.h"
+#include "ActionResetTimer.h"
+#include "ActionSendSignal.h"
+#include "ActionSetActor.h"
+#include "ActionSetGameToken.h"
+#include "ActionWait.h"
+#include "SpecialConditionsImpl.h"
+#include "ConditionImpl.h"
 
 using namespace CryDRS;
 
@@ -99,9 +112,14 @@ CResponseSystem::CResponseSystem()
 //--------------------------------------------------------------------------------------------------
 CResponseSystem::~CResponseSystem()
 {
-	for (ResponseActorList::iterator it = m_createdActors.begin(), itEnd = m_createdActors.end(); it != itEnd; ++it)
+	if (gEnv->pSchematyc != nullptr)
 	{
-		delete *it;
+		gEnv->pSchematyc->GetEnvRegistry().DeregisterPackage(GetSchematycPackageGUID());
+	}
+
+	for (CResponseActor* pActor : m_createdActors)
+	{
+		delete pActor;
 	}
 	m_createdActors.clear();
 
@@ -121,15 +139,26 @@ CResponseSystem::~CResponseSystem()
 //--------------------------------------------------------------------------------------------------
 bool CResponseSystem::Init()
 {	
+	bool isDataPathEmpty = (0 == strlen(m_pDataPath->GetString()));
+
 	m_filesFolder = PathUtil::GetGameFolder() + CRY_NATIVE_PATH_SEPSTR + m_pDataPath->GetString();
 	m_pSpeakerManager->Init();
-	m_pDialogLineDatabase->InitFromFiles(m_filesFolder + CRY_NATIVE_PATH_SEPSTR "DialogLines");
+
+	if (!isDataPathEmpty)
+	{
+		m_pDialogLineDatabase->InitFromFiles(m_filesFolder + CRY_NATIVE_PATH_SEPSTR "DialogLines");
+	}
 	
 	m_currentTime.SetSeconds(0.0f);
 
 	m_pVariableCollectionManager->GetCollection(CVariableCollection::s_globalCollectionName)->CreateVariable("CurrentTime", 0.0f);
 
-	return m_pResponseManager->LoadFromFiles(m_filesFolder + CRY_NATIVE_PATH_SEPSTR "Responses");
+	bool isLoaded = false;
+	if (!isDataPathEmpty)
+	{
+		isLoaded = m_pResponseManager->LoadFromFiles(m_filesFolder + CRY_NATIVE_PATH_SEPSTR "Responses");
+	}
+	return isLoaded;
 }
 
 //--------------------------------------------------------------------------------------------------
@@ -355,14 +384,19 @@ void CResponseSystem::OnSystemEvent(ESystemEvent event, UINT_PTR pWparam, UINT_P
 
 			if (gEnv->pSchematyc)
 			{
-				const Schematyc::SGUID guid = "981168e2-f16d-46b7-bfaa-e11966204d47"_schematyc_guid;
 				const char* szName = "DynamicResponseSystem";
 				const char* szDescription = "Dynamic response system";
 				Schematyc::EnvPackageCallback callback = SCHEMATYC_MEMBER_DELEGATE(&CResponseSystem::RegisterSchematycEnvPackage, *this);
-				gEnv->pSchematyc->GetEnvRegistry().RegisterPackage(SCHEMATYC_MAKE_ENV_PACKAGE(guid, szName, Schematyc::g_szCrytek, szDescription, callback));
+				gEnv->pSchematyc->GetEnvRegistry().RegisterPackage(SCHEMATYC_MAKE_ENV_PACKAGE(GetSchematycPackageGUID(), szName, Schematyc::g_szCrytek, szDescription, callback));
 			}
 			break;
 		}
+	case ESYSTEM_EVENT_GAME_FRAMEWORK_ABOUT_TO_SHUTDOWN:
+		{
+			m_pSpeakerManager->Shutdown();
+			m_pResponseManager->Reset(false, true);  //We have to release all mapped responses here, because they might contain game specific actions/conditions.
+		}
+		break;
 	}
 }
 
@@ -537,7 +571,7 @@ void CResponseSystem::SetCurrentState(const DRS::ValuesList& collectionsList)
 CResponseActor::CResponseActor(const string& name, EntityId usedEntityID, const char* szGlobalVariableCollectionToUse)
 	: m_linkedEntityID(usedEntityID)
 	, m_name(name)
-	, m_AuxProxyToUse(CryAudio::InvalidAuxObjectId)
+	, m_auxAudioObjectIdToUse(CryAudio::InvalidAuxObjectId)
 	, m_nameHashed(name)
 	, m_variableCollectionName(CHashedString(szGlobalVariableCollectionToUse))
 {
@@ -555,6 +589,7 @@ CResponseActor::CResponseActor(const string& name, EntityId usedEntityID, const 
 CResponseActor::~CResponseActor()
 {
 	CResponseSystem::GetInstance()->GetSpeakerManager()->OnActorRemoved(this);
+	CResponseSystem::GetInstance()->GetResponseManager()->OnActorRemoved(this);
 	m_pNonGlobalVariableCollection = nullptr;  //Remark: if we are using a global variable collection we are not releasing it. We assume it`s handled outside	
 }
 
@@ -624,6 +659,32 @@ const CVariableCollection* CResponseActor::GetLocalVariables() const
 
 namespace DRS
 {
-SERIALIZATION_CLASS_NULL(IResponseAction, 0);
-SERIALIZATION_CLASS_NULL(IResponseCondition, 0);
+SERIALIZATION_CLASS_NULL(IResponseAction, "");
+SERIALIZATION_CLASS_NULL(IResponseCondition, "");
 }
+
+REGISTER_DRS_ACTION(CActionCancelSignal, "CancelSignal", DEFAULT_DRS_ACTION_COLOR);
+REGISTER_DRS_ACTION(CActionCancelSpeaking, "CancelSpeaking", DEFAULT_DRS_ACTION_COLOR);
+REGISTER_DRS_ACTION(CActionSetVariable, "ChangeVariable", "11DD11");
+REGISTER_DRS_ACTION(CActionCopyVariable, "CopyVariable", DEFAULT_DRS_ACTION_COLOR);
+REGISTER_DRS_ACTION(CActionExecuteResponse, "ExecuteResponse", DEFAULT_DRS_ACTION_COLOR);
+REGISTER_DRS_ACTION(CActionResetTimerVariable, "ResetTimerVariable", DEFAULT_DRS_ACTION_COLOR);
+REGISTER_DRS_ACTION(CActionSendSignal, "SendSignal", DEFAULT_DRS_ACTION_COLOR);
+REGISTER_DRS_ACTION(CActionSetActor, "SetActor", DEFAULT_DRS_ACTION_COLOR);
+REGISTER_DRS_ACTION(CActionSetActorByVariable, "SetActorFromVariable", DEFAULT_DRS_ACTION_COLOR);
+REGISTER_DRS_ACTION(CActionSetGameToken, "SetGameToken", DEFAULT_DRS_ACTION_COLOR);
+REGISTER_DRS_ACTION(CActionSpeakLine, "SpeakLine", "00FF00");
+REGISTER_DRS_ACTION(CActionWait, "Wait", DEFAULT_DRS_ACTION_COLOR);
+
+REGISTER_DRS_CONDITION(CExecutionLimitCondition, "Execution Limit", DEFAULT_DRS_CONDITION_COLOR);
+REGISTER_DRS_CONDITION(CGameTokenCondition, "GameToken", DEFAULT_DRS_CONDITION_COLOR);
+REGISTER_DRS_CONDITION(CInheritConditionsCondition, "Inherit Conditions", DEFAULT_DRS_CONDITION_COLOR);
+REGISTER_DRS_CONDITION(CPlaceholderCondition, "Placeholder", "FF66CC");
+REGISTER_DRS_CONDITION(CRandomCondition, "Random", DEFAULT_DRS_CONDITION_COLOR);
+REGISTER_DRS_CONDITION(CTimeSinceCondition, "TimeSince", DEFAULT_DRS_CONDITION_COLOR);
+REGISTER_DRS_CONDITION(CTimeSinceResponseCondition, "TimeSinceResponse", DEFAULT_DRS_CONDITION_COLOR);
+REGISTER_DRS_CONDITION(CVariableEqualCondition, "Variable equal to ", DEFAULT_DRS_CONDITION_COLOR);
+REGISTER_DRS_CONDITION(CVariableLargerCondition, "Variable greater than ", DEFAULT_DRS_CONDITION_COLOR);
+REGISTER_DRS_CONDITION(CVariableRangeCondition, "Variable in range ", DEFAULT_DRS_CONDITION_COLOR);
+REGISTER_DRS_CONDITION(CVariableSmallerCondition, "Variable less than ", DEFAULT_DRS_CONDITION_COLOR);
+REGISTER_DRS_CONDITION(CVariableAgainstVariablesCondition, "Variable to Variable", DEFAULT_DRS_CONDITION_COLOR);

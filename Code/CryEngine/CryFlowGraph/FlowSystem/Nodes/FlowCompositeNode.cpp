@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "FlowCompositeNode.h"
@@ -13,21 +13,9 @@ static const char* INTERIOR_NODE_TYPE = "CompositeInterior";
  */
 
 CCompositeInteriorNode::CCompositeInteriorNode(CFlowCompositeNodeFactoryPtr pFactory)
-	: m_refs(0)
-	, m_pFactory(pFactory)
+	: m_pFactory(pFactory)
 	, m_pParent(nullptr)
 {
-}
-
-void CCompositeInteriorNode::AddRef()
-{
-	++m_refs;
-}
-
-void CCompositeInteriorNode::Release()
-{
-	if (0 == --m_refs)
-		delete this;
 }
 
 IFlowNodePtr CCompositeInteriorNode::Clone(SActivationInfo*)
@@ -47,14 +35,13 @@ void CCompositeInteriorNode::ProcessEvent(EFlowEvent event, SActivationInfo* pAc
 	case eFE_Activate:
 		{
 			size_t numPorts = m_pFactory->GetInputPortCount(false);
-			TFlowNodeId interfaceNode = m_pFactory->GetInterfaceNode();
 			CCompositeGraph* pMyGraph = (CCompositeGraph*) pActInfo->pGraph;
 			pActInfo = pMyGraph->GetParentInfo();
 
 			for (size_t i = 0; i < numPorts; i++)
 			{
-				if (pActInfo->pInputPorts[i].IsUserFlagSet())
-					pActInfo->pGraph->ActivatePort(SFlowAddress(pActInfo->myID, static_cast<TFlowPortId>(i), true), pActInfo->pInputPorts[i]);
+				if (IsPortActive(pActInfo, i))
+					pActInfo->pGraph->ActivatePort(SFlowAddress(pActInfo->myID, static_cast<TFlowPortId>(i), true), GetPortAny(pActInfo, i));
 			}
 		}
 		break;
@@ -154,21 +141,10 @@ void CCompositeGraph::GetMemoryUsage(ICrySizer* s) const
  */
 
 CFlowCompositeNode::CFlowCompositeNode(SActivationInfo* pActInfo, IFlowGraphPtr pGraph, CFlowCompositeNodeFactoryPtr pFactory)
-	: m_refs(0), m_parentInfo(*pActInfo), m_pGraph(pGraph), m_pFactory(pFactory)
+	: m_parentInfo(*pActInfo), m_pGraph(pGraph), m_pFactory(pFactory)
 {
 	((CCompositeGraph*)&*pGraph)->Reparent(this);
 	pActInfo->pGraph->SetRegularlyUpdated(pActInfo->myID, true);
-}
-
-void CFlowCompositeNode::AddRef()
-{
-	++m_refs;
-}
-
-void CFlowCompositeNode::Release()
-{
-	if (0 == --m_refs)
-		delete this;
 }
 
 IFlowNodePtr CFlowCompositeNode::Clone(SActivationInfo* pActInfo)
@@ -197,8 +173,8 @@ void CFlowCompositeNode::ProcessEvent(EFlowEvent event, SActivationInfo* pActInf
 
 			for (size_t i = 0; i < numPorts; i++)
 			{
-				if (pActInfo->pInputPorts[i].IsUserFlagSet())
-					m_pGraph->ActivatePort(SFlowAddress(interfaceNode, static_cast<TFlowPortId>(i), true), pActInfo->pInputPorts[i]);
+				if (IsPortActive(pActInfo, i))
+					m_pGraph->ActivatePort(SFlowAddress(interfaceNode, static_cast<TFlowPortId>(i), true), GetPortAny(pActInfo, i));
 			}
 		}
 		break;
@@ -227,8 +203,7 @@ void CFlowCompositeNode::GetMemoryUsage(ICrySizer* s) const
  * factory
  */
 
-CFlowCompositeNodeFactory::CFlowCompositeNodeFactory() :
-	m_nRefs(0)
+CFlowCompositeNodeFactory::CFlowCompositeNodeFactory()
 {
 }
 
@@ -238,6 +213,8 @@ CFlowCompositeNodeFactory::~CFlowCompositeNodeFactory()
 
 CFlowCompositeNodeFactory::EInitResult CFlowCompositeNodeFactory::Init(XmlNodeRef node, CFlowSystem* pSystem)
 {
+	CRY_ASSERT(this->UseCount());
+
 	XmlNodeRef ports = node->findChild("Ports");
 	if (!ports)
 	{
@@ -287,7 +264,6 @@ CFlowCompositeNodeFactory::EInitResult CFlowCompositeNodeFactory::Init(XmlNodeRe
 	m_inputsInt.push_back(termIn);
 	m_inputsExt.push_back(termIn);
 
-	CRY_ASSERT(m_nRefs);
 	CHookPtr pHook = new CHook(pSystem, this);
 	m_pPrototypeGraph = new CCompositeGraph(pSystem);
 	m_pPrototypeGraph->RegisterHook(&*pHook);
@@ -316,17 +292,6 @@ void CFlowCompositeNodeFactory::GetConfiguration(bool exterior, SFlowNodeConfig&
 		config.pInputPorts = &m_inputsInt[0];
 		config.pOutputPorts = &m_outputsInt[0];
 	}
-}
-
-void CFlowCompositeNodeFactory::AddRef()
-{
-	++m_nRefs;
-}
-
-void CFlowCompositeNodeFactory::Release()
-{
-	if (0 == --m_nRefs)
-		delete this;
 }
 
 IFlowNodePtr CFlowCompositeNodeFactory::Create(IFlowNode::SActivationInfo* pActInfo)

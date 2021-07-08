@@ -158,7 +158,6 @@ def configure(conf):
 	
 	conf.load('compile_settings_windows', tooldir=CRY_WAF_TOOL_DIR)
 	conf.load('compile_settings_linux', tooldir=CRY_WAF_TOOL_DIR)
-	conf.load('compile_settings_linux_x86', tooldir=CRY_WAF_TOOL_DIR)
 	conf.load('compile_settings_linux_x64', tooldir=CRY_WAF_TOOL_DIR)
 	conf.load('compile_settings_darwin', tooldir=CRY_WAF_TOOL_DIR)
 	
@@ -187,6 +186,7 @@ def configure(conf):
 	###########################################
 	# Load support for c# and swig
 	conf.load('swig', tooldir=CRY_WAF_TOOL_DIR)
+	conf.load('protoc', tooldir=CRY_WAF_TOOL_DIR)
 	conf.load('cs', tooldir=CRY_WAF_TOOL_DIR)
 		
 	#Get user defined active specs
@@ -253,7 +253,8 @@ def configure(conf):
 			# Try to load the function			
 			getattr(conf, function_name)()
 			
-			conf.configure_qt()
+			conf.configure_qt()			
+			conf.configure_protoc()
 
 			# Load swig and mono
 			conf.configure_swig()
@@ -356,6 +357,17 @@ stored_output_file = ''
 ## Run 'build' step	
 def build(bld):
 
+	###########################################
+	# Setup command coordinator
+	bld.load('cmd_coordinator', tooldir=CRY_WAF_TOOL_DIR)
+	bld.setup_command_coordinator()
+	
+	# We might run multiple instances of WAF at the same time
+	# 1) IB as master ... The WAF IB instance (master) will handle task creation and will intercept each call to a .exe file making it the "Build Master" ... the original WAF instance should just exit here
+	# 2) IB as service ... The original WAF instance(master) will handle the task creation and "may" forward the .exe calls to the IB instance (slave)
+	if not bld.instance_is_build_master():
+		return
+
 	# Keep backward compatibility
 	if bld.options.project_spec == 'everything':	
 		bld.options.project_spec = 'trybuilder'
@@ -412,8 +424,7 @@ def build(bld):
 		except OSError:	
 			# No project_gen timestamp, append project_gen to commands
 			if bld.is_option_true('generate_vs_projects_automatically') and  Utils.unversioned_sys_platform() == 'win32':
-				if not bld.is_option_true('internal_dont_check_recursive_execution'):
-					Options.commands = Options.commands + ['msvs']
+				Options.commands = Options.commands + ['msvs']
 					
 	###########################################
 	# Check for valid variant if we are not generating projects	
@@ -456,17 +467,6 @@ def build(bld):
 			for target in bld.options.targets.split(','):
 				if not target in  bld.spec_modules():
 					bld.fatal('[ERROR] Module "%s" is not configurated to be build in spec "%s" in "%s|%s"' % (target, bld.options.project_spec, platform, configuration))
-					
-	###########################################
-	# Setup command coordinator
-	bld.load('cmd_coordinator', tooldir=CRY_WAF_TOOL_DIR)
-	bld.setup_command_coordinator()
-	 
-	# We might run multiple instances of WAF at the same time
-	# 1) IB as master ... The WAF IB instance (master) will handle task creation and will intercept each call to a .exe file making it the "Build Master" ... the original WAF instance should just exit here
-	# 2) IB as service ... The original WAF instance(master) will handle the task creation and "may" forward the .exe calls to the IB instance (slave)
-	if not bld.instance_is_build_master():
-		return
 
 	###########################################
 	bld.add_post_fun(post_command_exec)
@@ -1038,6 +1038,8 @@ def get_output_folders(self, platform, configuration, target_spec = None, game_p
 		path += self.options.out_folder_darwin64
 	elif platform == 'android_arm':
 		path += self.options.out_folder_android
+	elif platform == 'android_arm64':
+		path += self.options.out_folder_android64
 	else:
 		path += 'bin/platform_unknown'
 				
@@ -1122,7 +1124,8 @@ def ExecuteBootstrap(bld):
 	ret = subprocess.call(
                 executable + [
                         '-d' + bootstrap_dat,
-                        '-m' + bootstrap_digest.abspath()])
+                        '-m' + bootstrap_digest.abspath(),
+						'--addrelevance=buildmachine'])
 	if ret == 0:
 		bld.msg('branch bootstrap', 'done')
 	else:

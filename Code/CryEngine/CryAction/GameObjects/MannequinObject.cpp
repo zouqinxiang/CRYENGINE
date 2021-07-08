@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "MannequinObject.h"
@@ -44,25 +44,13 @@ CMannequinObject::CMannequinObject()
 void CMannequinObject::Initialize()
 {
 	const auto pGameObject = gEnv->pGameFramework->GetIGameObjectSystem()->CreateGameObjectForEntity(GetEntity()->GetId());
-	assert(pGameObject);
+	CRY_ASSERT(pGameObject);
 
 	pGameObject->EnablePrePhysicsUpdate(ePPU_Always);
 	pGameObject->EnablePhysicsEvent(true, eEPE_OnPostStepImmediate);
 }
 
-void CMannequinObject::OnShutDown()
-{
-	if (m_pAnimatedCharacter)
-	{
-		IGameObject* pGameObject = GetEntity()->GetComponent<CGameObject>();
-		assert(pGameObject);
-		assert(pGameObject == gEnv->pGameFramework->GetGameObject(GetEntity()->GetId()));
-
-		pGameObject->ReleaseExtension("AnimatedCharacter");
-	}
-}
-
-void CMannequinObject::ProcessEvent(SEntityEvent& event)
+void CMannequinObject::ProcessEvent(const SEntityEvent& event)
 {
 	switch (event.event)
 	{
@@ -77,12 +65,12 @@ void CMannequinObject::ProcessEvent(SEntityEvent& event)
 	}
 }
 
-uint64 CMannequinObject::GetEventMask() const
+Cry::Entity::EventFlags CMannequinObject::GetEventMask() const
 {
-	return BIT64(ENTITY_EVENT_START_LEVEL)
-	       | BIT64(ENTITY_EVENT_EDITOR_PROPERTY_CHANGED)
-	       | BIT64(ENTITY_EVENT_RESET)
-	       | BIT64(ENTITY_EVENT_XFORM_FINISHED_EDITOR);
+	return ENTITY_EVENT_START_LEVEL
+	       | ENTITY_EVENT_EDITOR_PROPERTY_CHANGED
+	       | ENTITY_EVENT_RESET
+	       | ENTITY_EVENT_XFORM_FINISHED_EDITOR;
 }
 
 IEntityPropertyGroup* CMannequinObject::GetPropertyGroup()
@@ -100,12 +88,15 @@ void CMannequinObject::Reset()
 	IEntity& entity = *GetEntity();
 
 	const auto pGameObject = gEnv->pGameFramework->GetIGameObjectSystem()->CreateGameObjectForEntity(entity.GetId());
-	assert(pGameObject);
+	CRY_ASSERT(pGameObject);
 
 	if (!m_pAnimatedCharacter)
 	{
 		m_pAnimatedCharacter = static_cast<IAnimatedCharacter*>(pGameObject->AcquireExtension("AnimatedCharacter"));
-		assert(m_pAnimatedCharacter);
+		if (!m_pAnimatedCharacter)
+		{
+			return;
+		}
 	}
 
 	m_pAnimatedCharacter->ResetState();

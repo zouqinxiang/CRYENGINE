@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #ifndef _SHARED_STATES_H_
 #define _SHARED_STATES_H_
@@ -76,11 +76,15 @@ public:
 	~CryGFxTextClipboard();
 
 #if CRY_PLATFORM_WINDOWS
-	bool HandleMessage(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT* pResult) override;
+	bool HandleMessage(CRY_HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam, LRESULT* pResult) override;
 #endif // CRY_PLATFORM_WINDOWS
 
 private:
 	CryGFxTextClipboard();
+
+#if CRY_PLATFORM_WINDOWS
+	bool m_bSyncingClipboardFromWindows;
+#endif // CRY_PLATFORM_WINDOWS
 };
 
 //////////////////////////////////////////////////////////////////////////

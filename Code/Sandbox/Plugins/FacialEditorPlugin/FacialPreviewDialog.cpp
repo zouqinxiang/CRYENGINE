@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "FacialPreviewDialog.h"
@@ -6,9 +6,12 @@
 #include "ModelViewport.h"
 #include "QMfcApp/qmfcviewporthost.h"
 #include "Resource.h"
-#include <CryAnimation/ICryAnimation.h>
 #include "Util/Variable.h"
 #include "IUndoObject.h"
+
+#include <CryRenderer/IRenderAuxGeom.h>
+#include <CryAnimation/ICryAnimation.h>
+#include <CryCore/ScopeGuard.h>
 
 IMPLEMENT_DYNAMIC(CFacialPreviewDialog, CToolbarDialog)
 
@@ -156,9 +159,9 @@ BOOL CFacialPreviewDialog::OnInitDialog()
 	m_vars.AddVariable(m_fLookIKOffsetX, _T("Look IK Offset X"));
 	m_vars.AddVariable(m_fLookIKOffsetY, _T("Look IK Offset Y"));
 	m_vars.AddVariable(m_bProceduralAnimation, _T("Procedural Animation"));
-	for (int i = 0; i < m_pModelViewport->GetVarObject()->GetVarBlock()->GetNumVariables(); ++i)
+	for (int i = 0; i < m_pModelViewport->GetVarObject()->GetNumVariables(); ++i)
 	{
-		IVariable* var = m_pModelViewport->GetVarObject()->GetVarBlock()->GetVariable(i);
+		IVariable* var = m_pModelViewport->GetVarObject()->GetVariable(i);
 		IVariable* clone = var->Clone(true);
 		clone->Wire(var);
 		m_vars.AddVariable(*static_cast<CVariableBase*>(clone), clone->GetName());
@@ -246,8 +249,13 @@ static const char* eyeBones[2] = { "eye_left_bone", "eye_right_bone" };
 void CModelViewportFE::Update()
 {
 	if (m_bPaused)
+	{
 		return;
+	}
 
+	CCamera cameraStoreRestore = gEnv->pSystem->GetViewCamera();
+	ScopeGuard cameraRestore{ [&cameraStoreRestore]() {gEnv->pSystem->SetViewCamera(cameraStoreRestore); } };
+	
 	if (m_bAnimateCamera)
 	{
 		IFacialAnimSequence* pSequence = (m_pContext ? m_pContext->GetSequence() : 0);

@@ -1,11 +1,11 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 
 #include "EntityContainerMgr.h"
-
+#include <CryRenderer/IRenderAuxGeom.h>
 #include <CryFlowGraph/IFlowGraphModuleManager.h>
-
+#include <CrySystem/ConsoleRegistration.h>
 
 CEntityContainerMgr::CEntityContainerMgr()
 	: m_listeners(16) // reasonable starting point
@@ -360,7 +360,7 @@ void CEntityContainerMgr::DebugRender(EntityId containerId)
 	{
 		if (const IEntity* pEntityContainer = gEnv->pEntitySystem->GetEntity(containerId))
 		{
-			if (const CEntityContainer* pGroup = GetContainerConst(containerId))
+			if (GetContainerConst(containerId) != nullptr)
 			{
 				// Render at original position
 				DebugRender(containerId, pEntityContainer->GetWorldPos());

@@ -1,11 +1,8 @@
-// Copyright 2001-2017 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "PerceptionManager.h"
 #include "ScriptBind_PerceptionManager.h"
-
-#include <CryGame/IGame.h>
-#include <CryGame/IGameFramework.h>
 
 #include <CryAISystem/IAISystem.h>
 #include <CryAISystem/IAIActor.h>
@@ -21,6 +18,7 @@
 
 //#include "DebugDrawContext.h"
 
+#ifdef CRYAISYSTEM_DEBUG
 // AI Stimulus names for debugging
 static const char* g_szAIStimulusType[EAIStimulusType::AISTIM_LAST] =
 {
@@ -48,25 +46,21 @@ static const char* g_szAIGrenadeStimType[AIGRENADE_LAST] =
 	" FLASH_BANG",
 	" SMOKE"
 };
+#endif
 
 CPerceptionManager* CPerceptionManager::s_pInstance = nullptr;
 
 //-----------------------------------------------------------------------------------------------------------
 CPerceptionManager::CPerceptionManager() :
-	m_pScriptBind(nullptr)
+	m_pScriptBind(nullptr),
+	m_bRegistered(false)
 {
+	GetISystem()->GetISystemEventDispatcher()->RegisterListener(this, "CPerceptionManager");
+	
 	Reset(IAISystem::RESET_INTERNAL);
 	for (unsigned i = 0; i < AI_MAX_STIMULI; ++i)
 	{
 		m_stimulusTypes[i].Reset();
-	}
-
-	CRY_ASSERT(gEnv->pAISystem);
-	if (gEnv->pAISystem)
-	{
-		gEnv->pAISystem->RegisterSystemComponent(this);
-		gEnv->pAISystem->Callbacks().ObjectCreated().Add(functor(*this, &CPerceptionManager::OnAIObjectCreated));
-		gEnv->pAISystem->Callbacks().ObjectRemoved().Add(functor(*this, &CPerceptionManager::OnAIObjectRemoved));
 	}
 
 	m_cVars.Init();
@@ -78,6 +72,8 @@ CPerceptionManager::CPerceptionManager() :
 //-----------------------------------------------------------------------------------------------------------
 CPerceptionManager::~CPerceptionManager()
 {
+	GetISystem()->GetISystemEventDispatcher()->RemoveListener(this);
+	
 	if (gEnv->pAISystem)
 	{
 		gEnv->pAISystem->Callbacks().ObjectCreated().Remove(functor(*this, &CPerceptionManager::OnAIObjectCreated));
@@ -85,6 +81,31 @@ CPerceptionManager::~CPerceptionManager()
 		gEnv->pAISystem->UnregisterSystemComponent(this);
 	}
 	delete m_pScriptBind;
+}
+
+void CPerceptionManager::OnSystemEvent(ESystemEvent event, UINT_PTR wparam, UINT_PTR lparam)
+{
+	switch (event)
+	{
+	case ESYSTEM_EVENT_GAME_POST_INIT:
+	{
+		CRY_ASSERT(gEnv->pAISystem);
+		if (!m_bRegistered && gEnv->pAISystem)
+		{
+			gEnv->pAISystem->RegisterSystemComponent(this);
+			gEnv->pAISystem->Callbacks().ObjectCreated().Add(functor(*this, &CPerceptionManager::OnAIObjectCreated));
+			gEnv->pAISystem->Callbacks().ObjectRemoved().Add(functor(*this, &CPerceptionManager::OnAIObjectRemoved));
+
+			m_bRegistered = true;
+		}
+		if (!m_pScriptBind)
+		{
+			m_pScriptBind = new CScriptBind_PerceptionManager(gEnv->pSystem);
+		}
+	}
+	default:
+		break;
+	}
 }
 
 //-----------------------------------------------------------------------------------------------------------
@@ -169,24 +190,6 @@ bool CPerceptionManager::RegisterStimulusDesc(EAIStimulusType type, const SAISti
 {
 	m_stimulusTypes[type] = desc;
 	return true;
-}
-
-//-----------------------------------------------------------------------------------------------------------
-void CPerceptionManager::Init()
-{
-	if (!m_pScriptBind)
-	{
-		m_pScriptBind = new CScriptBind_PerceptionManager(gEnv->pSystem);
-	}
-}
-
-//-----------------------------------------------------------------------------------------------------------
-void CPerceptionManager::PostInit()
-{
-	if (!m_pScriptBind)
-	{
-		m_pScriptBind = new CScriptBind_PerceptionManager(gEnv->pSystem);
-	}
 }
 
 //-----------------------------------------------------------------------------------------------------------
@@ -316,7 +319,7 @@ void CPerceptionManager::ActorUpdate(IAIObject* pAIObject, IAIObject::EUpdateTyp
 	if (type != IAIObject::Full)
 		return;
 	
-	FUNCTION_PROFILER(gEnv->pSystem, PROFILE_AI);
+	CRY_PROFILE_FUNCTION( PROFILE_AI);
 
 	IAIActor* pAIActor = pAIObject->CastToIAIActor();
 	CRY_ASSERT(pAIActor);
@@ -337,7 +340,7 @@ void CPerceptionManager::ActorUpdate(IAIObject* pAIObject, IAIObject::EUpdateTyp
 	const Vec3& actorPos = pAIObject->GetPos();
 
 	{
-		FRAME_PROFILER("AIPlayerVisibilityCheck", gEnv->pSystem, PROFILE_AI);
+		CRY_PROFILE_SECTION(PROFILE_AI, "AIPlayerVisibilityCheck");
 
 		// Priority targets.
 		for (IAIObject* pTarget : m_priorityTargets)
@@ -392,7 +395,7 @@ void CPerceptionManager::ActorUpdate(IAIObject* pAIObject, IAIObject::EUpdateTyp
 	}
 
 	{
-		FRAME_PROFILER("ProbableTargets", gEnv->pSystem, PROFILE_AI);
+		CRY_PROFILE_SECTION(PROFILE_AI, "ProbableTargets");
 		// Probable targets.
 		for (IAIObject* pProbTarget : m_probableTargets)
 		{
@@ -728,7 +731,7 @@ void CPerceptionManager::UpdateStimuli(float deltaTime)
 //-----------------------------------------------------------------------------------------------------------
 void CPerceptionManager::VisCheckBroadPhase(float deltaTime)
 {
-	FUNCTION_PROFILER(gEnv->pSystem, PROFILE_AI);
+	CRY_PROFILE_FUNCTION( PROFILE_AI);
 
 	CRY_ASSERT(gEnv->pAISystem->GetActorLookup());
 	IActorLookUp& lookUp = *gEnv->pAISystem->GetActorLookup();
@@ -831,7 +834,7 @@ void CPerceptionManager::IgnoreStimulusFrom(EntityId sourceId, EAIStimulusType t
 //-----------------------------------------------------------------------------------------------------------
 void CPerceptionManager::HandleSound(const SStimulusRecord& stim)
 {
-	FUNCTION_PROFILER(gEnv->pSystem, PROFILE_AI);
+	CRY_PROFILE_FUNCTION( PROFILE_AI);
 
 	CRY_ASSERT(gEnv->pAISystem->GetActorLookup());
 	IActorLookUp& lookUp = *gEnv->pAISystem->GetActorLookup();
@@ -926,7 +929,7 @@ void CPerceptionManager::HandleSound(const SStimulusRecord& stim)
 //-----------------------------------------------------------------------------------------------------------
 void CPerceptionManager::HandleCollision(const SStimulusRecord& stim)
 {
-	FUNCTION_PROFILER(gEnv->pSystem, PROFILE_AI);
+	CRY_PROFILE_FUNCTION( PROFILE_AI);
 
 	CRY_ASSERT(gEnv->pAISystem->GetActorLookup());
 	IActorLookUp& lookUp = *gEnv->pAISystem->GetActorLookup();
@@ -977,11 +980,12 @@ void CPerceptionManager::HandleCollision(const SStimulusRecord& stim)
 		if (!perceptionActor || !perceptionActor->IsEnabled())
 			continue;
 
-		IAISignalExtraData* pData = gEnv->pAISystem->CreateSignalExtraData();
+		AISignals::IAISignalExtraData* pData = gEnv->pAISystem->CreateSignalExtraData();
 		pData->iValue = thrownByPlayer ? 1 : 0;
 		pData->fValue = sqrtf(distSq);
 		pData->point = stim.pos;
-		pReceiverActor->SetSignal(0, "OnCloseCollision", 0, pData);
+		
+		pReceiverActor->SetSignal(gEnv->pAISystem->GetSignalManager()->CreateSignal(AISIGNAL_INCLUDE_DISABLED, gEnv->pAISystem->GetSignalManager()->GetBuiltInSignalDescriptions().GetOnCloseCollision(), 0, pData));
 
 		if (thrownByPlayer)
 		{
@@ -998,7 +1002,7 @@ void CPerceptionManager::HandleCollision(const SStimulusRecord& stim)
 //-----------------------------------------------------------------------------------------------------------
 void CPerceptionManager::HandleExplosion(const SStimulusRecord& stim)
 {
-	FUNCTION_PROFILER(gEnv->pSystem, PROFILE_AI);
+	CRY_PROFILE_FUNCTION( PROFILE_AI);
 
 	CRY_ASSERT(gEnv->pAISystem->GetActorLookup());
 	IActorLookUp& lookUp = *gEnv->pAISystem->GetActorLookup();
@@ -1029,11 +1033,11 @@ void CPerceptionManager::HandleExplosion(const SStimulusRecord& stim)
 				continue;
 		}
 
-		IAISignalExtraData* pData = gEnv->pAISystem->CreateSignalExtraData();
+		AISignals::IAISignalExtraData* pData = gEnv->pAISystem->CreateSignalExtraData();
 		pData->point = stim.pos;
 
 		SetLastExplosionPosition(stim.pos, pReceiverObject);
-		pReceiverActor->SetSignal(0, "OnExposedToExplosion", 0, pData);
+		pReceiverActor->SetSignal(gEnv->pAISystem->GetSignalManager()->CreateSignal(AISIGNAL_INCLUDE_DISABLED, gEnv->pAISystem->GetSignalManager()->GetBuiltInSignalDescriptions().GetOnExposedToExplosion(), 0, pData));
 
 		if (IPuppet* pReceiverPuppet = pReceiverObject->CastToIPuppet())
 			pReceiverPuppet->SetAlarmed();
@@ -1045,7 +1049,7 @@ void CPerceptionManager::HandleExplosion(const SStimulusRecord& stim)
 //-----------------------------------------------------------------------------------------------------------
 void CPerceptionManager::HandleBulletHit(const SStimulusRecord& stim)
 {
-	FUNCTION_PROFILER(gEnv->pSystem, PROFILE_AI);
+	CRY_PROFILE_FUNCTION( PROFILE_AI);
 
 	CRY_ASSERT(gEnv->pAISystem->GetActorLookup());
 	IActorLookUp& lookUp = *gEnv->pAISystem->GetActorLookup();
@@ -1053,7 +1057,6 @@ void CPerceptionManager::HandleBulletHit(const SStimulusRecord& stim)
 
 	IEntity* pShooterEnt = gEnv->pEntitySystem->GetEntity(stim.sourceId);
 	IAIObject* pShooterObject = pShooterEnt ? pShooterEnt->GetAI() : nullptr;
-	IAIActor* pShooterActor = pShooterObject ? pShooterObject->CastToIAIActor() : nullptr;
 
 	// Send bullet events
 	size_t activeCount = lookUp.GetActiveCount();
@@ -1117,7 +1120,7 @@ void CPerceptionManager::HandleBulletHit(const SStimulusRecord& stim)
 //-----------------------------------------------------------------------------------------------------------
 void CPerceptionManager::HandleBulletWhizz(const SStimulusRecord& stim)
 {
-	FUNCTION_PROFILER(gEnv->pSystem, PROFILE_AI);
+	CRY_PROFILE_FUNCTION( PROFILE_AI);
 
 	CRY_ASSERT(gEnv->pAISystem->GetActorLookup());
 	IActorLookUp& lookUp = *gEnv->pAISystem->GetActorLookup();
@@ -1161,7 +1164,7 @@ void CPerceptionManager::HandleBulletWhizz(const SStimulusRecord& stim)
 //-----------------------------------------------------------------------------------------------------------
 void CPerceptionManager::HandleGrenade(const SStimulusRecord& stim)
 {
-	FUNCTION_PROFILER(gEnv->pSystem, PROFILE_AI);
+	CRY_PROFILE_FUNCTION( PROFILE_AI);
 
 	EntityId shooterId = stim.sourceId;
 
@@ -1223,13 +1226,14 @@ void CPerceptionManager::HandleGrenade(const SStimulusRecord& stim)
 
 					if (!result || result[0].dist > dist * 0.9f)
 					{
-						IAISignalExtraData* pEData = gEnv->pAISystem->CreateSignalExtraData(); // no leak - this will be deleted inside SendAnonymousSignal
+						AISignals::IAISignalExtraData* pEData = gEnv->pAISystem->CreateSignalExtraData(); // no leak - this will be deleted inside SendAnonymousSignal
 						pEData->point = stim.pos;                                            // avoid predicted pos
 						pEData->nID = shooterId;
 						pEData->iValue = 1;
 
 						SetLastExplosionPosition(stim.pos, pAIObject);
-						gEnv->pAISystem->SendSignal(SIGNALFILTER_SENDER, 1, "OnGrenadeDanger", pAIObject, pEData);
+						const AISignals::SignalSharedPtr pSignal = gEnv->pAISystem->GetSignalManager()->CreateSignal(AISIGNAL_DEFAULT, gEnv->pAISystem->GetSignalManager()->GetBuiltInSignalDescriptions().GetOnGrenadeDanger(), pAIObject->GetEntityID(), pEData);
+						gEnv->pAISystem->SendSignal(AISignals::ESignalFilter::SIGNALFILTER_SENDER, pSignal);
 
 						RecordStimulusEvent(stim, 0.0f, *pAIObject);
 					}
@@ -1251,13 +1255,14 @@ void CPerceptionManager::HandleGrenade(const SStimulusRecord& stim)
 
 				IAIObject* pAIObject = lookUp.GetActor<IAIObject>(actorIndex);
 
-				IAISignalExtraData* pEData = gEnv->pAISystem->CreateSignalExtraData();  // no leak - this will be deleted inside SendAnonymousSignal
+				AISignals::IAISignalExtraData* pEData = gEnv->pAISystem->CreateSignalExtraData();  // no leak - this will be deleted inside SendAnonymousSignal
 				pEData->point = stim.pos;
 				pEData->nID = shooterId;
 				pEData->iValue = 2;
 
 				SetLastExplosionPosition(stim.pos, pAIObject);
-				gEnv->pAISystem->SendSignal(SIGNALFILTER_SENDER, 1, "OnGrenadeDanger", pAIObject, pEData);
+				const AISignals::SignalSharedPtr pSignal = gEnv->pAISystem->GetSignalManager()->CreateSignal(AISIGNAL_DEFAULT, gEnv->pAISystem->GetSignalManager()->GetBuiltInSignalDescriptions().GetOnGrenadeDanger(), pAIObject->GetEntityID(), pEData);
+				gEnv->pAISystem->SendSignal(AISignals::ESignalFilter::SIGNALFILTER_SENDER, pSignal);
 
 				RecordStimulusEvent(stim, 0.0f, *pAIObject);
 			}
@@ -1294,9 +1299,11 @@ void CPerceptionManager::HandleGrenade(const SStimulusRecord& stim)
 
 					if (!gEnv->pAISystem->GetGlobalRaycaster()->Cast(RayCastRequest(vAIActorPos, delta * dist, objTypes, flags)))
 					{
-						IAISignalExtraData* pExtraData = gEnv->pAISystem->CreateSignalExtraData();
+						AISignals::IAISignalExtraData* pExtraData = gEnv->pAISystem->CreateSignalExtraData();
 						pExtraData->iValue = 0;
-						gEnv->pAISystem->SendSignal(SIGNALFILTER_SENDER, 1, "OnExposedToFlashBang", pAIObject, pExtraData);
+
+						AISignals::SignalSharedPtr pSignal = gEnv->pAISystem->GetSignalManager()->CreateSignal(AISIGNAL_DEFAULT, gEnv->pAISystem->GetSignalManager()->GetBuiltInSignalDescriptions().GetOnExposedToFlashBang(), pAIObject->GetEntityID(), pExtraData);
+						gEnv->pAISystem->SendSignal(AISignals::ESignalFilter::SIGNALFILTER_SENDER, pSignal);
 
 						RecordStimulusEvent(stim, 0.0f, *pAIObject);
 					}
@@ -1317,7 +1324,8 @@ void CPerceptionManager::HandleGrenade(const SStimulusRecord& stim)
 				if (Distance::Point_PointSq(stim.pos, lookUp.GetPosition(actorIndex)) > radSq)
 					continue;
 
-				gEnv->pAISystem->SendSignal(SIGNALFILTER_SENDER, 1, "OnExposedToSmoke", pAIObject);
+				const AISignals::SignalSharedPtr pSignal = gEnv->pAISystem->GetSignalManager()->CreateSignal(AISIGNAL_DEFAULT, gEnv->pAISystem->GetSignalManager()->GetBuiltInSignalDescriptions().GetOnExposedToSmoke(), pAIObject->GetEntityID());
+				gEnv->pAISystem->SendSignal(AISignals::ESignalFilter::SIGNALFILTER_SENDER, pSignal);
 
 				RecordStimulusEvent(stim, 0.0f, *pAIObject);
 			}
@@ -1372,7 +1380,7 @@ bool CPerceptionManager::IsPointInRadiusOfStimulus(EAIStimulusType type, const V
 //-----------------------------------------------------------------------------------------------------------
 void CPerceptionManager::NotifyAIEventListeners(const SStimulusRecord& stim, float threat)
 {
-	FUNCTION_PROFILER(gEnv->pSystem, PROFILE_AI);
+	CRY_PROFILE_FUNCTION( PROFILE_AI);
 
 	int flags = 1 << (int)stim.type;
 
@@ -1426,7 +1434,7 @@ float CPerceptionManager::SupressSound(const Vec3& pos, float radius)
 //-----------------------------------------------------------------------------------------------------------
 bool CPerceptionManager::IsSoundOccluded(IAIActor* pAIActor, const Vec3& vSoundPos)
 {
-	FUNCTION_PROFILER(gEnv->pSystem, PROFILE_AI);
+	CRY_PROFILE_FUNCTION( PROFILE_AI);
 
 	// The sound is occluded because of the buildings.
 	// But not now yet
@@ -1633,7 +1641,7 @@ void CPerceptionManager::DebugDraw(IAIDebugRenderer* pDebugRenderer)
 {
 	if (m_cVars.DebugPerceptionManager > 0)
 	{
-		FUNCTION_PROFILER(GetISystem(), PROFILE_AI);
+		CRY_PROFILE_FUNCTION(PROFILE_AI);
 
 		DebugDrawPerception(pDebugRenderer, m_cVars.DebugPerceptionManager);
 		DebugDrawPerformance(pDebugRenderer, m_cVars.DebugPerceptionManager);
@@ -1848,7 +1856,6 @@ void CPerceptionManager::DebugDrawPerformance(IAIDebugRenderer* pDebugRenderer, 
 
 		for (size_t actorIndex = 0; actorIndex < activeActorCount; ++actorIndex)
 		{
-			IAIActor* pAIActor = lookUp.GetActor<IAIActor>(actorIndex);
 			pDebugRenderer->DrawSphere(lookUp.GetPosition(actorIndex), 1.0f, ColorB(255, 0, 0));
 		}
 	}

@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
    -------------------------------------------------------------------------
@@ -22,16 +22,15 @@
 #include "Serialization/SerializeScriptTableReader.h"
 #include "GameObjectSystem.h"
 #include <CrySystem/ITextModeConsole.h>
+#include <CryRenderer/IRenderAuxGeom.h>
 #include "CryActionCVars.h"
-
-#include <CryAISystem/IAIObject.h>
-#include <CryAISystem/IAIActorProxy.h>
 
 // ugly: for GetMovementController()
 #include "IActorSystem.h"
 #include "IVehicleSystem.h"
 
 #include <CryNetwork/INetwork.h>
+#include <CrySystem/ConsoleRegistration.h>
 
 //#pragma optimize("", off)
 //#pragma inline_depth(0)
@@ -147,7 +146,8 @@ CGameObject::CGameObject() :
 	m_predictionHandle(0),
 	m_bPhysicsDisabled(false),
 	m_bNeedsNetworkRebind(false),
-	m_bOnInitEventCalled(false)
+	m_bOnInitEventCalled(false),
+	m_bShouldUpdate(false)
 {
 	static_assert(eGFE_Last <= 64, "Unexpected enum value!");
 
@@ -378,7 +378,7 @@ bool CGameObject::BindToNetworkWithParent(EBindToNetworkMode mode, EntityId pare
 	bool previously_bound = m_pNetEntity->IsBoundToNetwork();
 	bool ret = m_pNetEntity->BindToNetworkWithParent(mode, parentId);
 
-	if (!previously_bound && ret && GetEntity()->IsInitialized())
+	if (!previously_bound && ret)
 	{
 		EvaluateUpdateActivation();
 	}
@@ -442,7 +442,7 @@ void CGameObject::DebugUpdateState()
 
 	if (g_showUpdateState == 2)
 	{
-		bool checkAIDisable = !ShouldUpdateAI() && GetEntity()->GetAI();
+		bool checkAIDisable = !ShouldUpdateAI() && GetEntity()->HasAI();
 		for (TExtensions::iterator iter = m_extensions.begin(); iter != m_extensions.end(); ++iter)
 		{
 			uint slotbit = 1;
@@ -496,7 +496,7 @@ void CGameObject::DebugUpdateState()
 //------------------------------------------------------------------------
 void CGameObject::Update(SEntityUpdateContext& ctx)
 {
-	FUNCTION_PROFILER(GetISystem(), PROFILE_ACTION);
+	CRY_PROFILE_FUNCTION(PROFILE_ACTION);
 
 	if (gEnv->pTimer->GetFrameStartTime() != g_lastUpdate)
 	{
@@ -529,17 +529,11 @@ void CGameObject::Update(SEntityUpdateContext& ctx)
 	/*
 	 * UPDATE EXTENSIONS
 	 */
-#ifdef _DEBUG
-	IGameObjectSystem* pGameObjectSystem = m_pGOS;
-#endif
 	bool shouldUpdateAI = ShouldUpdateAI();
 	bool keepUpdating = shouldUpdateAI;
-	bool checkAIDisableOnSlots = !shouldUpdateAI && GetEntity()->GetAI();
+	bool checkAIDisableOnSlots = !shouldUpdateAI && GetEntity()->HasAI();
 	for (TExtensions::iterator iter = m_extensions.begin(); iter != m_extensions.end(); ++iter)
 	{
-#ifdef _DEBUG
-		const char* name = pGameObjectSystem->GetName(iter->id);
-#endif
 		uint32 slotbit = 1;
 		for (uint32 i = 0; i < MAX_UPDATE_SLOTS_PER_EXTENSION; ++i)
 		{
@@ -607,9 +601,9 @@ void CGameObject::ForceUpdateExtension(IGameObjectExtension* pExt, int slot)
 }
 
 //------------------------------------------------------------------------
-void CGameObject::ProcessEvent(SEntityEvent& event)
+void CGameObject::ProcessEvent(const SEntityEvent& event)
 {
-	FUNCTION_PROFILER(GetISystem(), PROFILE_ACTION);
+	CRY_PROFILE_FUNCTION(PROFILE_ACTION);
 
 	if (m_pEntity)
 	{
@@ -707,10 +701,10 @@ void CGameObject::ProcessEvent(SEntityEvent& event)
 		case ENTITY_EVENT_UNHIDE:
 			EvaluateUpdateActivation();
 			break;
+		case ENTITY_EVENT_SPAWNED_REMOTELY:
+			PostRemoteSpawn();
+			break;
 		}
-
-		if (IAIObject* aiObject = m_pEntity->GetAI())
-			aiObject->EntityEvent(event);
 
 		// Events to extensions are sent by Entity system as they are EntityComponents
 		/*
@@ -722,19 +716,36 @@ void CGameObject::ProcessEvent(SEntityEvent& event)
 	}
 }
 
-uint64 CGameObject::GetEventMask() const
+Cry::Entity::EventFlags CGameObject::GetEventMask() const
 {
-	return
-	  BIT64(ENTITY_EVENT_INIT) |
-		BIT64(ENTITY_EVENT_RESET) |
-	  BIT64(ENTITY_EVENT_DONE) |
-	  BIT64(ENTITY_EVENT_UPDATE) |
-	  BIT64(ENTITY_EVENT_RENDER_VISIBILITY_CHANGE) |
-	  BIT64(ENTITY_EVENT_ENTERAREA) |
-	  BIT64(ENTITY_EVENT_LEAVEAREA) |
-	  BIT64(ENTITY_EVENT_POST_SERIALIZE) |
-	  BIT64(ENTITY_EVENT_HIDE) |
-	  BIT64(ENTITY_EVENT_UNHIDE);
+	Cry::Entity::EventFlags eventMask =
+		ENTITY_EVENT_INIT |
+		ENTITY_EVENT_RESET |
+		ENTITY_EVENT_DONE |
+		ENTITY_EVENT_RENDER_VISIBILITY_CHANGE |
+		ENTITY_EVENT_ENTERAREA |
+		ENTITY_EVENT_LEAVEAREA |
+		ENTITY_EVENT_POST_SERIALIZE |
+		ENTITY_EVENT_HIDE |
+		ENTITY_EVENT_UNHIDE |
+		ENTITY_EVENT_SPAWNED_REMOTELY;
+
+	if (m_bShouldUpdate)
+	{
+		eventMask |= ENTITY_EVENT_UPDATE;
+	}
+
+	if (m_bPrePhysicsEnabled)
+	{
+		eventMask |= ENTITY_EVENT_PREPHYSICSUPDATE;
+	}
+
+	return eventMask;
+}
+
+IEntityComponent::ComponentEventPriority CGameObject::GetEventPriority() const
+{
+	return ENTITY_PROXY_USER + EEntityEventPriority_GameObject;
 }
 
 //------------------------------------------------------------------------
@@ -859,7 +870,7 @@ static const char* AspectProfileSerializationName(int i)
 		buffer[7] = 'e';
 	}
 
-	assert(i >= 0 && i < 256);
+	CRY_ASSERT(i >= 0 && i < 256);
 	i = clamp_tpl<int>(i, 0, 255);
 	buffer[8] = 0;
 	buffer[9] = 0;
@@ -1129,13 +1140,13 @@ ILINE bool CGameObject::DoGetSetExtensionParams(const char* extension, SmartScri
 
 IGameObjectExtension* CGameObject::QueryExtension(const char* extension) const
 {
-	FUNCTION_PROFILER(GetISystem(), PROFILE_ACTION);
+	CRY_PROFILE_FUNCTION(PROFILE_ACTION);
 	return QueryExtension(m_pGOS->GetID(extension));
 }
 
 IGameObjectExtension* CGameObject::QueryExtension(IGameObjectSystem::ExtensionID id) const
 {
-	FUNCTION_PROFILER(GetISystem(), PROFILE_ACTION);
+	CRY_PROFILE_FUNCTION(PROFILE_ACTION);
 
 	SExtension ext;
 	ext.id = id;
@@ -1192,8 +1203,7 @@ IGameObjectExtension* CGameObject::ChangeExtension(const char* name, EChangeExte
 					ext.refCount += (change == eCE_Acquire);
 					ext.activated |= (change == eCE_Activate);
 					ext.pExtension = pGameObjectSystem->Instantiate(ext.id, this);
-					assert(ext.pExtension);
-					if (ext.pExtension)
+					if (CRY_VERIFY(ext.pExtension))
 					{
 						pRet = ext.pExtension;
 						if (updatingEntity == GetEntityId())
@@ -1341,7 +1351,7 @@ void CGameObject::EnableUpdateSlot(IGameObjectExtension* pExtension, int slot)
 	SExtension* pExt = GetExtensionInfo(pExtension);
 	if (pExt)
 	{
-		CRY_ASSERT_TRACE(255 != pExt->updateEnables[slot], ("Already got 255 reasons for slot %d of '%s' to be enabled", slot, GetEntity()->GetEntityTextDescription().c_str()));
+		CRY_ASSERT(255 != pExt->updateEnables[slot], "Already got 255 reasons for slot %d of '%s' to be enabled", slot, GetEntity()->GetEntityTextDescription().c_str());
 		++pExt->updateEnables[slot];
 	}
 	EvaluateUpdateActivation();
@@ -1568,7 +1578,7 @@ bool CGameObject::ShouldUpdate()
 	// evaluate main-loop activation
 	bool shouldUpdateAI(!GetEntity()->IsHidden() && (IsProbablyVisible() || !IsProbablyDistant()));
 	bool shouldBeActivated = shouldUpdateAI;
-	bool hasAI = NULL != GetEntity()->GetAI();
+	bool hasAI = GetEntity()->HasAI();
 	bool checkAIDisableOnSlots = !shouldUpdateAI && hasAI;
 	for (TExtensions::iterator iter = m_extensions.begin(); iter != m_extensions.end() && !shouldBeActivated; ++iter)
 	{
@@ -1587,7 +1597,7 @@ void CGameObject::EvaluateUpdateActivation()
 	// evaluate main-loop activation
 	bool shouldUpdateAI = ShouldUpdateAI();
 	bool shouldBeActivated = shouldUpdateAI;
-	bool hasAI = NULL != GetEntity()->GetAI();
+	bool hasAI = GetEntity()->HasAI();
 	bool checkAIDisableOnSlots = !shouldUpdateAI && hasAI;
 	for (TExtensions::iterator iter = m_extensions.begin(); iter != m_extensions.end() && !shouldBeActivated; ++iter)
 	{
@@ -1621,8 +1631,8 @@ void CGameObject::EvaluateUpdateActivation()
 
 	if (shouldActivatePrePhysics != m_bPrePhysicsEnabled)
 	{
-		m_pEntity->PrePhysicsActivate(shouldActivatePrePhysics);
 		m_bPrePhysicsEnabled = shouldActivatePrePhysics;
+		m_pEntity->UpdateComponentEventMask(this);
 	}
 
 	if (TestIsProbablyVisible(m_updateState))
@@ -1643,11 +1653,10 @@ void CGameObject::EvaluateUpdateActivation()
 
 void CGameObject::SetActivation(bool activate)
 {
-	bool wasActivated = m_pEntity->IsActive();
-
 	if (TestIsProbablyVisible(m_updateState))
 		SetPhysicsDisable(false);
 	else
+	{
 		switch (m_physDisableMode)
 		{
 		default:
@@ -1657,23 +1666,22 @@ void CGameObject::SetActivation(bool activate)
 		case eADPM_WhenInvisibleAndFarAway:
 			break;
 		case eADPM_WhenAIDeactivated:
-			if (wasActivated && !activate)
+			if (m_bShouldUpdate && !activate)
 				SetPhysicsDisable(true);
 			break;
 		}
+	}
 
-	if (wasActivated != activate)
+	// Special case to keep legacy behavior of entity update being disabled when hiddden and ENTITY_FLAG_UPDATE_HIDDEN is not set
+	if (activate && (m_pEntity->IsHidden() && (m_pEntity->GetFlags() & ENTITY_FLAG_UPDATE_HIDDEN) == 0))
 	{
-		m_pEntity->Activate(activate);
+		activate = false;
+	}
 
-		if (!activate)
-		{
-			IAIObject* aiObject = m_pEntity->GetAI();
-			IAIActorProxy* proxy = aiObject ? aiObject->GetProxy() : 0;
-
-			if (proxy)
-				proxy->NotifyAutoDeactivated();
-		}
+	if (m_bShouldUpdate != activate)
+	{
+		m_bShouldUpdate = activate;
+		m_pEntity->UpdateComponentEventMask(this);
 	}
 
 	if (activate)
@@ -1755,37 +1763,8 @@ void CGameObject::ForceUpdate(bool force)
 		--m_forceUpdate;
 
 	CRY_ASSERT(m_forceUpdate >= 0);
-}
 
-struct SContainerSer : public ISerializableInfo
-{
-	void SerializeWith(TSerialize ser)
-	{
-		for (size_t i = 0; i < m_children.size(); i++)
-			m_children[i]->SerializeWith(ser);
-	}
-
-	std::vector<ISerializableInfoPtr> m_children;
-};
-
-ISerializableInfoPtr CGameObject::GetSpawnInfo()
-{
-	_smart_ptr<SContainerSer> pC;
-
-	for (TExtensions::iterator iter = m_extensions.begin(); iter != m_extensions.end(); ++iter)
-	{
-		if (iter->pExtension)
-		{
-			ISerializableInfoPtr pS = iter->pExtension->GetSpawnInfo();
-			if (pS)
-			{
-				if (!pC)
-					pC = new SContainerSer;
-				pC->m_children.push_back(pS);
-			}
-		}
-	}
-	return &*pC;
+	EvaluateUpdateActivation();
 }
 
 void CGameObject::SetNetworkParent(EntityId id)
@@ -1815,7 +1794,7 @@ bool CGameObject::SetAIActivation(EGameObjectAIActivationMode mode)
 		EvaluateUpdateActivation(); // need to recheck any updates on slots
 	}
 
-	return GetEntity()->IsActive();
+	return GetEntity()->IsActivatedForUpdates();
 }
 
 bool CGameObject::ShouldUpdateAI()
@@ -1880,7 +1859,7 @@ void CGameObject::RegisterAsPredicted()
 {
 	CRY_ASSERT(!m_predictionHandle);
 	m_predictionHandle = gEnv->pGameFramework->GetNetContext()->RegisterPredictedSpawn(
-		gEnv->pGameFramework->GetClientChannel(), GetEntityId());
+	  gEnv->pGameFramework->GetClientChannel(), GetEntityId());
 }
 
 int CGameObject::GetPredictionHandle()
@@ -1894,11 +1873,11 @@ void CGameObject::RegisterAsValidated(IGameObject* pGO, int predictionHandle)
 		return;
 	m_predictionHandle = predictionHandle;
 
-	INetChannel *pNetChannel = gEnv->pGameFramework->GetNetChannel(pGO->GetChannelId());
+	INetChannel* pNetChannel = gEnv->pGameFramework->GetNetChannel(pGO->GetChannelId());
 	if (pNetChannel)
 	{
 		gEnv->pGameFramework->GetNetContext()->RegisterValidatedPredictedSpawn(
-			pNetChannel, m_predictionHandle, GetEntityId());
+		  pNetChannel, m_predictionHandle, GetEntityId());
 	}
 }
 
@@ -1970,6 +1949,29 @@ void CGameObject::UnRegisterExtForEvents(IGameObjectExtension* piExtention, cons
 		{
 			pExtension->eventReg = 0;
 		}
+	}
+}
+
+void CGameObject::OnNetworkedEntityTransformChanged(EntityTransformationFlagsMask transformReasons)
+{
+	if (gEnv->bMultiplayer && (m_pEntity->GetFlags() & (ENTITY_FLAG_CLIENT_ONLY | ENTITY_FLAG_SERVER_ONLY)) == 0 && gEnv->pNetContext)
+	{
+		bool doAspectUpdate = true;
+		if (transformReasons.Check(ENTITY_XFORM_FROM_PARENT) && transformReasons.Check(ENTITY_XFORM_NO_PROPOGATE))
+			doAspectUpdate = false;
+		// position has changed, best let other people know about it
+		// disabled volatile... see OnSpawn for reasoning
+		if (doAspectUpdate)
+		{
+			gEnv->pNetContext->ChangedAspects(m_pEntity->GetId(), /*eEA_Volatile |*/ eEA_Physics);
+		}
+#if FULL_ON_SCHEDULING
+		float drawDistance = -1;
+		if (IEntityRender* pRP = pEntity->GetRenderInterface())
+			if (IRenderNode* pRN = pRP->GetRenderNode())
+				drawDistance = pRN->GetMaxViewDist();
+		m_pNetContext->ChangedTransform(entId, pEntity->GetWorldPos(), pEntity->GetWorldRotation(), drawDistance);
+#endif
 	}
 }
 

@@ -1,9 +1,9 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "stdafx.h"
 #include "VehicleMovementPanel.h"
 
-#include "Controls\PropertyItem.h"
+#include "Controls/PropertyItem.h"
 
 #include "VehicleData.h"
 #include "VehicleEditorDialog.h"

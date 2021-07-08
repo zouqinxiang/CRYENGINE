@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
 -------------------------------------------------------------------------
@@ -19,6 +19,7 @@ History:
 #include "Weapon.h"
 #include "Utility/CryWatch.h"
 #include "WeaponSystem.h"
+#include <CrySystem/ConsoleRegistration.h>
 
 int static ma_debug = 0;
 
@@ -72,8 +73,6 @@ CMiscAnnouncer::~CMiscAnnouncer()
 void CMiscAnnouncer::Init()
 {
 	CryLog("CMiscAnnouncer::Init()");
-
-	IEntityClassRegistry *pEntityClassRegistry = gEnv->pEntitySystem->GetClassRegistry();
 	
 	XmlNodeRef xmlData = GetISystem()->LoadXmlFromFile("Scripts/Sounds/MiscAnnouncements.xml");
 	InitXML(xmlData);
@@ -253,7 +252,7 @@ void CMiscAnnouncer::InitXML(XmlNodeRef root)
 				else
 				{
 					CryLog("CMiscAnnouncer::InitXML() failed to find entityClass for pWeaponClassName=%s", pWeaponClassName);
-					CRY_ASSERT_MESSAGE(0, string().Format("CMiscAnnouncer::InitXML() failed to find entityClass for pWeaponClassName=%s", pWeaponClassName));
+					CRY_ASSERT(0, string().Format("CMiscAnnouncer::InitXML() failed to find entityClass for pWeaponClassName=%s", pWeaponClassName));
 				}
 			}
 			else

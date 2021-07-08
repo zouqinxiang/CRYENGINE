@@ -1,16 +1,22 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 using System;
 using System.Globalization;
+using System.Runtime.InteropServices;
 using CryEngine.Common;
 
 namespace CryEngine
 {
+	[StructLayout(LayoutKind.Sequential)]
 	public struct Vector4 : IEquatable<Vector4>
 	{
+		[MarshalAs(UnmanagedType.R4)]
 		private float _x;
+		[MarshalAs(UnmanagedType.R4)]
 		private float _y;
+		[MarshalAs(UnmanagedType.R4)]
 		private float _z;
+		[MarshalAs(UnmanagedType.R4)]
 		private float _w;
 
 		public float x { get { return _x; } set { _x = value; } }
@@ -31,6 +37,9 @@ namespace CryEngine
 			_w = wCoord;
 		}
 
+		public Vector4(Vector2 v, float z, float w) : this(v.x, v.y, z, w) { }
+		public Vector4(Vector3 v, float w) : this(v.x, v.y, v.z, w) { }
+
 		#region Overrides
 		public override int GetHashCode()
 		{
@@ -38,10 +47,12 @@ namespace CryEngine
 			{
 				int hash = 17;
 
+#pragma warning disable RECS0025 // Non-readonly field referenced in 'GetHashCode()'
 				hash = hash * 23 + _x.GetHashCode();
 				hash = hash * 23 + _y.GetHashCode();
 				hash = hash * 23 + _z.GetHashCode();
 				hash = hash * 23 + _w.GetHashCode();
+#pragma warning restore RECS0025 // Non-readonly field referenced in 'GetHashCode()'
 
 				return hash;
 			}
@@ -60,7 +71,7 @@ namespace CryEngine
 
 		public bool Equals(Vector4 other)
 		{
-			return MathHelpers.IsEqual(_x, other.x) && MathHelpers.IsEqual(_y, other.y) && MathHelpers.IsEqual(_z, other.z) && MathHelpers.IsEqual(_w, other.w);
+			return MathHelpers.Approximately(_x, other.x) && MathHelpers.Approximately(_y, other.y) && MathHelpers.Approximately(_z, other.z) && MathHelpers.Approximately(_w, other.w);
 		}
 
 		public override string ToString()
@@ -88,6 +99,17 @@ namespace CryEngine
 		public static implicit operator Vector4(Vector3 vec3)
 		{
 			return new Vector4(vec3.x, vec3.y, vec3.z, 0);
+		}
+
+		public static explicit operator Vector4(Vector2 vector)
+		{
+			return new Vector4
+			{
+				X = vector.X,
+				Y = vector.Y,
+				Z = 0.0f,
+				W = 0.0f
+			};
 		}
 		#endregion
 
@@ -139,7 +161,7 @@ namespace CryEngine
 
 		public bool IsNearlyZero()
 		{
-			return (Math.Abs(_x) <= MathHelpers.FloatEpsilon && Math.Abs(_y) <= MathHelpers.FloatEpsilon) && Math.Abs(_z) <= MathHelpers.FloatEpsilon && Math.Abs(_w) <= MathHelpers.FloatEpsilon;
+			return (Math.Abs(_x) <= MathHelpers.Epsilon && Math.Abs(_y) <= MathHelpers.Epsilon) && Math.Abs(_z) <= MathHelpers.Epsilon && Math.Abs(_w) <= MathHelpers.Epsilon;
 		}
 
 		public static Vector4 Lerp(Vector4 p, Vector4 q, float t)
@@ -178,7 +200,7 @@ namespace CryEngine
 						return _w;
 
 					default:
-						throw new ArgumentOutOfRangeException("index", "Indices must run from 0 to 3!");
+						throw new ArgumentOutOfRangeException(nameof(index), "Indices must run from 0 to 3!");
 				}
 			}
 			set
@@ -199,7 +221,7 @@ namespace CryEngine
 						break;
 
 					default:
-						throw new ArgumentOutOfRangeException("index", "Indices must run from 0 to 3!");
+						throw new ArgumentOutOfRangeException(nameof(index), "Indices must run from 0 to 3!");
 				}
 			}
 		}
@@ -208,7 +230,7 @@ namespace CryEngine
 		{
 			get
 			{
-				if (IsNearlyZero()) return new CryEngine.Vector4(0f, 0f, 0f, 0f);
+				if (IsNearlyZero()) return new Vector4(0f, 0f, 0f, 0f);
 				Vector4 result = this * 1.0f / (float)Math.Sqrt(_x * _x + _y * _y + _z * _z + _w * _w);
 				return result;
 			}

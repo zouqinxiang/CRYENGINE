@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #ifndef Animation_PoseAligner_h
 #define Animation_PoseAligner_h
@@ -180,8 +180,8 @@ public:
 	virtual ~CPose();
 
 public:
-	bool         Initialize(IEntity& entity, int rootJointIndex);
-	virtual bool Initialize(IEntity& entity) { return false; }
+	bool         Initialize(IEntity& entity, ICharacterInstance* pCharacter, int rootJointIndex);
+	virtual bool Initialize(IEntity& entity, ICharacterInstance* pCharacter) { return false; }
 	void         Reset();
 	void         Clear();
 
@@ -197,7 +197,7 @@ public:
 
 	void         SetBlendWeight(float weight)                          { m_blendWeight = weight; }
 
-	void         Update(const QuatT& location, const float time);
+	void         Update(ICharacterInstance* pCharacter, const QuatT& location, const float time);
 
 private:
 	void SetupPoseModifiers(const QuatT& location);
@@ -234,12 +234,12 @@ public:
 class CPoseAlignerC3 :
 	PoseAligner::CPose
 {
-	CRYGENERATE_CLASS(CPoseAlignerC3, "AnimationPoseAlignerC3", 0xf5381a4c1374ff00, 0x8de19ba730cf572b)
+	CRYGENERATE_CLASS_GUID(CPoseAlignerC3, "AnimationPoseAlignerC3", "f5381a4c-1374-ff00-8de1-9ba730cf572b"_cry_guid)
 
 		virtual ~CPoseAlignerC3() {}
 
 public:
-	virtual bool Initialize(IEntity& entity) override;
+	virtual bool Initialize(IEntity& entity, ICharacterInstance* pCharacter) override;
 };
 
 #endif // Animation_PoseAligner_h

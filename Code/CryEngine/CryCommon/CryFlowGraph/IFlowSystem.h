@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -119,6 +119,7 @@ inline const char* FlowTypeToHumanName(EFlowDataTypes flowDataType)
 		return szTypeName;
 }
 
+//! \cond INTERNAL
 //! Default conversion uses C++ rules.
 template<class From, class To>
 struct SFlowSystemConversion
@@ -190,7 +191,7 @@ namespace cry_variant
 template<> \
 ILINE bool ConvertVariant<T, stl::variant_size<TFlowInputDataVariant>::value>(const TFlowInputDataVariant&, T&) \
 { \
-	CRY_ASSERT_MESSAGE(false, "Invalid variant index."); \
+	CRY_ASSERT(false, "Invalid variant index."); \
 	return false; \
 }
 	FLOWSYSTEM_CONVERTVARIANT_SPECIALIZATION(SFlowSystemVoid);
@@ -231,7 +232,7 @@ ILINE bool ConvertVariant<T, stl::variant_size<TFlowInputDataVariant>::value>(co
 template<> \
 ILINE bool ConvertToVariant<T, stl::variant_size<TFlowInputDataVariant>::value>(const T&, TFlowInputDataVariant&) \
 { \
-	CRY_ASSERT_MESSAGE(false, "Invalid variant index."); \
+	CRY_ASSERT(false, "Invalid variant index."); \
 	return false; \
 }
 	FLOWSYSTEM_CONVERTTOVARIANT_SPECIALIZATION(SFlowSystemVoid);
@@ -536,9 +537,10 @@ inline bool DefaultInitializedForTag::Initialize<stl::variant_size<TFlowInputDat
 		return true;
 	}
 
-	CRY_ASSERT_MESSAGE(var.index() == stl::variant_npos, "Invalid variant index.");
+	CRY_ASSERT(var.index() == stl::variant_npos, "Invalid variant index.");
 	return false;
 }
+//! \endcond
 
 class TFlowInputData
 {
@@ -847,7 +849,7 @@ public:
 	}
 
 	//! Checks if the current value matches the given string or if it would require a conversion due to incompatible with the datatype
-	// eg. setting a Bool with '1' is valid, setting it with '12' is not (so this will return true). For both cases the FlowData will be set to true
+	//! eg. setting a Bool with '1' is valid, setting it with '12' is not (so this will return true). For both cases the FlowData will be set to true
 	bool CheckIfForcedConversionOfCurrentValueWithString(const string& valueStr)
 	{
 		string convertedValueStr;
@@ -909,6 +911,9 @@ public:
 					}
 				}
 				break;
+			default:
+				CryLogAlways("Attempted to convert an invalid EFlowDataTypes member.");
+				break;
 			}
 
 			return true;
@@ -947,12 +952,15 @@ public:
 
 	void           Serialize(TSerialize ser)
 	{
-		MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "Configurable variant serialization");
+		MEMSTAT_CONTEXT(EMemStatContextType::Other, "Configurable variant serialization");
 
 		if (ser.IsWriting())
 		{
 			WriteType visitor(ser, IsUserFlagSet());
 			stl::visit(visitor, m_variant);
+
+			bool locked = m_locked;
+			ser.Value("locked", locked);
 		}
 		else
 		{
@@ -967,6 +975,10 @@ public:
 
 			LoadType visitor(ser);
 			stl::visit(visitor, m_variant);
+
+			bool locked;
+			ser.Value("locked", locked);
+			m_locked = locked;
 		}
 	}
 
@@ -981,6 +993,9 @@ public:
 	{
 		stl::visit(visitor, m_variant);
 	}
+
+	TFlowInputDataVariant&       GetVariant() { return m_variant; }
+	const TFlowInputDataVariant& GetVariant() const { return m_variant; }
 
 	void GetMemoryStatistics(ICrySizer* pSizer) const
 	{
@@ -1005,7 +1020,7 @@ private:
 template<>
 ILINE void TFlowInputData::LoadType::SerializeVariant<stl::variant_size<TFlowInputDataVariant>::value>(TFlowInputDataVariant& var)
 {
-	CRY_ASSERT_MESSAGE(false, "Invalid variant index.");
+	CRY_ASSERT(false, "Invalid variant index.");
 }
 template<>
 ILINE void TFlowInputData::WriteType::SerializeVariant<stl::variant_size<TFlowInputDataVariant>::value>(TFlowInputDataVariant& var)
@@ -1014,7 +1029,7 @@ ILINE void TFlowInputData::WriteType::SerializeVariant<stl::variant_size<TFlowIn
 template<>
 ILINE void TFlowInputData::MemStatistics::AddVariant<stl::variant_size<TFlowInputDataVariant>::value>(const TFlowInputDataVariant&)
 {
-	CRY_ASSERT_MESSAGE(false, "Invalid variant index.");
+	CRY_ASSERT(false, "Invalid variant index.");
 }
 
 struct SFlowAddress
@@ -1275,10 +1290,12 @@ struct IFlowNode;
 TYPEDEF_AUTOPTR(IFlowNode);
 typedef IFlowNode_AutoPtr IFlowNodePtr;
 
-struct IFlowNode
+struct IFlowNode : public _i_reference_target_t
 {
 	struct SActivationInfo
 	{
+		typedef void (*ActivateOutputCallback)(SActivationInfo *actInfo,int nOutputPort, const TFlowInputData& value);
+
 		SActivationInfo(IFlowGraph* pGraph = 0, TFlowNodeId myID = 0, void* pUserData = 0, TFlowInputData* pInputPorts = 0)
 		{
 			this->pGraph = pGraph;
@@ -1294,6 +1311,10 @@ struct IFlowNode
 		TFlowPortId     connectPort;
 		TFlowInputData* pInputPorts;
 		void*           m_pUserData;
+		
+		//! Optional override for output activation callback
+		ActivateOutputCallback activateOutputCallback = nullptr;
+		
 
 		//! Mono-specific Helper.
 		TFlowInputData* GetInputPort(int idx) { return &pInputPorts[idx]; }
@@ -1318,10 +1339,36 @@ struct IFlowNode
 		eFE_DontDoAnythingWithThisPlease
 	};
 
+	IFlowNode() = default;
+
 	// <interfuscator:shuffle>
 	virtual ~IFlowNode(){}
-	virtual void         AddRef() = 0;
-	virtual void         Release() = 0;
+
+	//! Provides base copy and move semantic without copying ref count in _i_reference_target_t
+	IFlowNode(IFlowNode const&) { }
+
+	//! Provides base copy and move semantic without copying ref count in _i_reference_target_t
+	IFlowNode& operator= (IFlowNode const&) { return *this; }
+
+	//! notification to be overridden in C# flow node
+	virtual void OnDelete() const {}
+	
+	//! override to kick off a notification for C# flow node.
+	//! to be removed when we get rid of C# flow node completely
+	virtual void Release() const override
+	{
+		if (--m_nRefCounter == 0)
+		{
+			OnDelete();
+			delete this;
+		}
+		else if (m_nRefCounter < 0)
+		{
+			assert(0);
+			CryFatalError("Deleting Reference Counted Object Twice");
+		}
+	}
+
 	virtual IFlowNodePtr Clone(SActivationInfo*) = 0;
 
 	virtual void         GetConfiguration(SFlowNodeConfig&) = 0;
@@ -1343,6 +1390,7 @@ struct IFlowNode
 	// </interfuscator:shuffle>
 };
 
+//! \cond INTERNAL
 //! Wraps IFlowNode for specific data.
 struct IFlowNodeData
 {
@@ -1364,8 +1412,12 @@ struct IFlowNodeData
 	virtual int      GetNumOutputPorts() const = 0;
 
 	virtual EntityId GetCurrentForwardingEntity() const = 0;
+
+	//! Access internal array of the node input data.
+	virtual TFlowInputData* GetInputData() const = 0;
 	// </interfuscator:shuffle>
 };
+//! \endcond
 
 struct IFlowGraph;
 TYPEDEF_AUTOPTR(IFlowGraph);
@@ -1411,6 +1463,7 @@ struct IFlowNodeIterator
 	// </interfuscator:shuffle>
 };
 
+//! \cond INTERNAL
 //! Structure that permits to iterate through the edge of the flowsystem.
 struct IFlowEdgeIterator
 {
@@ -1430,6 +1483,7 @@ struct IFlowEdgeIterator
 	virtual bool Next(Edge& edge) = 0;
 	// </interfuscator:shuffle>
 };
+//! \endcond
 
 TYPEDEF_AUTOPTR(IFlowNodeIterator);
 typedef IFlowNodeIterator_AutoPtr IFlowNodeIteratorPtr;
@@ -1444,6 +1498,7 @@ struct SFlowNodeActivationListener
 	// </interfuscator:shuffle>
 };
 
+//! \cond INTERNAL
 namespace NFlowSystemUtils
 {
 
@@ -1493,6 +1548,7 @@ struct Wrapper<bool>
 	explicit Wrapper(const bool& v) : value(v) {}
 	const bool& value;
 };
+//! \endcond
 
 struct IFlowSystemTyped
 {
@@ -1642,6 +1698,8 @@ struct IFlowGraph : public NFlowSystemUtils::IFlowSystemTyped
 	//! Checks if the flow graph is suspended.
 	virtual bool IsSuspended() const = 0;
 
+	virtual bool IsInInitializationPhase() const = 0;
+
 	// AI action related.
 
 	//! Sets an AI Action
@@ -1695,6 +1753,7 @@ struct IFlowGraph : public NFlowSystemUtils::IFlowSystemTyped
 
 	///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+	//! \cond INTERNAL
 	//! Graph tokens are gametokens which are unique to a particular flow graph.
 	struct SGraphToken
 	{
@@ -1703,6 +1762,8 @@ struct IFlowGraph : public NFlowSystemUtils::IFlowSystemTyped
 		string         name;
 		EFlowDataTypes type;
 	};
+	//! \endcond
+
 	virtual size_t                         GetGraphTokenCount() const = 0; //! Get the number of graph tokens for this graph
 	virtual const IFlowGraph::SGraphToken* GetGraphToken(size_t index) const = 0; //! Get a graph token by index
 	virtual const char*                    GetGlobalNameForGraphToken(const char* tokenName) const = 0; //! Get the corresponding name for the GTS registry
@@ -1712,12 +1773,10 @@ struct IFlowGraph : public NFlowSystemUtils::IFlowSystemTyped
 	virtual TFlowGraphId                   GetGraphId() const = 0; //! ID with which this graph is registered in the IFlowSystem
 };
 
-struct IFlowNodeFactory
+struct IFlowNodeFactory : public _i_reference_target_t
 {
 	// <interfuscator:shuffle>
 	virtual ~IFlowNodeFactory(){}
-	virtual void         AddRef() = 0;
-	virtual void         Release() = 0;
 	virtual IFlowNodePtr Create(IFlowNode::SActivationInfo*) = 0;
 	virtual void         GetMemoryUsage(ICrySizer* s) const = 0;
 	virtual void         Reset() = 0;
@@ -1822,7 +1881,7 @@ typedef std::shared_ptr<IFlowSystemContainer> IFlowSystemContainerPtr;
 
 struct IFlowSystemEngineModule : public Cry::IDefaultModule
 {
-	CRYINTERFACE_DECLARE(IFlowSystemEngineModule, 0x96B193486AD3427F, 0x9A8F7764052A5536);
+	CRYINTERFACE_DECLARE_GUID(IFlowSystemEngineModule, "96b19348-6ad3-427f-9a8f-7764052a5536"_cry_guid);
 };
 
 struct IFlowSystem
@@ -1905,6 +1964,9 @@ struct IFlowSystem
 	virtual IFlowSystemContainerPtr GetContainer(TFlowSystemContainerId id) = 0;
 
 	virtual void                    Serialize(TSerialize ser) = 0;
+
+	//! Creates an instance of IFlowNode by specified type.
+	virtual IFlowNodePtr            CreateNodeOfType(IFlowNode::SActivationInfo*, TFlowNodeTypeId typeId) = 0;
 	// </interfuscator:shuffle>
 };
 
@@ -1973,7 +2035,17 @@ template<class T>
 ILINE void ActivateOutput(IFlowNode::SActivationInfo* pActInfo, int nPort, const T& value)
 {
 	SFlowAddress addr(pActInfo->myID, nPort, true);
-	pActInfo->pGraph->ActivatePort(addr, value);
+	if (!pActInfo->activateOutputCallback)
+	{
+		pActInfo->pGraph->ActivatePort(addr, value);
+	}
+	else
+	{
+		TFlowInputData valueData;
+		valueData.SetUserFlag(true);
+		valueData.SetValueWithConversion(value);
+		pActInfo->activateOutputCallback(pActInfo,nPort,valueData);
+	}
 }
 
 ILINE bool IsOutputConnected(IFlowNode::SActivationInfo* pActInfo, int nPort)

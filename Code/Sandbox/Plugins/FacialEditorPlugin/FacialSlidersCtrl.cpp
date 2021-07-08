@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "FacialSlidersCtrl.h"
@@ -184,7 +184,6 @@ void CFacialSlidersCtrl::RecalcLayout()
 	GetClientRect(rcClient);
 
 	int nSliderWidth = GetColumnWidth(COLUMN_SLIDER);
-	int nTextrWidth = GetColumnWidth(COLUMN_NAME);
 	int nNewTextWidth = rcClient.Width() - nSliderWidth - 4 - 45 - 50;
 	if (nNewTextWidth < m_nTextWidth)
 		nNewTextWidth = m_nTextWidth;

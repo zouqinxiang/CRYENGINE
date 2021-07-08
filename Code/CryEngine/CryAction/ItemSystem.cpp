@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /************************************************************************
    -------------------------------------------------------------------------
@@ -22,12 +22,15 @@
 
 #include <CryEntitySystem/IEntitySystem.h>
 #include <CryAnimation/ICryAnimation.h>
+#include <CryAISystem/ISignal.h>
+#include <CryRenderer/IRenderAuxGeom.h>
 #include <IVehicleSystem.h>
 #include "ItemParams.h"
 #include "EquipmentManager.h"
 #include "CryActionCVars.h"
 
 #include "IGameRulesSystem.h"
+#include <CrySystem/ConsoleRegistration.h>
 
 ICVar* CItemSystem::m_pPrecache = 0;
 ICVar* CItemSystem::m_pItemLimitMP = 0;
@@ -97,23 +100,20 @@ CItemSystem::~CItemSystem()
 }
 
 //------------------------------------------------------------------------
-void CItemSystem::OnLoadingStart(ILevelInfo* pLevelInfo)
+bool CItemSystem::OnLoadingStart(ILevelInfo* pLevelInfo)
 {
 	Reset();
 
 	ClearGeometryCache();
 	ClearSoundCache();
+
+	return true;
 }
 
 //------------------------------------------------------------------------
 void CItemSystem::OnLoadingComplete(ILevelInfo* pLevel)
 {
-	// marcio: precaching of items enabled by default for now
-	//	ICVar *sys_preload=gEnv->pConsole->GetCVar("sys_preload");
-	//	if ((!sys_preload || sys_preload->GetIVal()) && m_pPrecache->GetIVal())
-	{
-		PrecacheLevel();
-	}
+	PrecacheLevel();
 }
 
 //------------------------------------------------------------------------
@@ -135,7 +135,7 @@ void CItemSystem::RegisterItemClass(const char* name, IGameFramework::IItemCreat
 //------------------------------------------------------------------------
 void CItemSystem::Update()
 {
-	FUNCTION_PROFILER(GetISystem(), PROFILE_ACTION);
+	CRY_PROFILE_FUNCTION(PROFILE_ACTION);
 
 	ITimer* pTimer = gEnv->pTimer;
 	IActor* pActor = m_pGameFramework->GetClientActor();
@@ -298,7 +298,7 @@ void CItemSystem::RegisterForCollection(EntityId itemId)
 						nItemId = it->first;
 					}
 				}
-
+#if defined(USE_CRY_ASSERT) || !defined(EXCLUDE_NORMAL_LOG)
 				if (IItem* pItem = GetItem(nItemId))
 				{
 					CRY_ASSERT(!pItem->GetOwnerId());
@@ -307,6 +307,13 @@ void CItemSystem::RegisterForCollection(EntityId itemId)
 					UnregisterForCollection(nItemId);
 					gEnv->pEntitySystem->RemoveEntity(nItemId);
 				}
+#else
+				if (GetItem(nItemId) != nullptr)
+				{
+					UnregisterForCollection(nItemId);
+					gEnv->pEntitySystem->RemoveEntity(nItemId);
+				}
+#endif
 			}
 		}
 	}
@@ -451,9 +458,6 @@ void CItemSystem::Scan(const char* folderName)
 			const char* fileExtension = PathUtil::GetExt(fd.name);
 			if (stricmp(fileExtension, "xml"))
 			{
-				if (stricmp(fileExtension, "binxml"))
-					GameWarning("ItemSystem: File '%s' does not have 'xml' extension, skipping.", fd.name);
-
 				continue;
 			}
 
@@ -487,8 +491,8 @@ void CItemSystem::Scan(const char* folderName)
 //------------------------------------------------------------------------
 bool CItemSystem::ScanXML(XmlNodeRef& root, const char* xmlFile)
 {
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "ItemSystem");
-	MEMSTAT_CONTEXT_FMT(EMemStatContextTypes::MSC_Other, 0, "Item XML (%s)", xmlFile);
+	MEMSTAT_CONTEXT(EMemStatContextType::Other, "ItemSystem");
+	MEMSTAT_CONTEXT(EMemStatContextType::Other, xmlFile);
 
 	if (strcmpi(root->getTag(), "item"))
 	{
@@ -671,7 +675,7 @@ EntityId CItemSystem::GiveItem(IActor* pActor, const char* item, bool sound, boo
 	SEntitySpawnParams params;
 	params.sName = itemName;
 	params.pClass = m_pEntitySystem->GetClassRegistry()->FindClass(item);
-	params.nFlags |= (ENTITY_FLAG_NO_PROXIMITY | ENTITY_FLAG_NEVER_NETWORK_STATIC | entityFlags);
+	params.nFlags |= (ENTITY_FLAG_NO_PROXIMITY | entityFlags);
 	if (!params.pClass)
 	{
 		GameWarning("Trying to spawn item of class '%s' which is unknown!", item);
@@ -682,7 +686,7 @@ EntityId CItemSystem::GiveItem(IActor* pActor, const char* item, bool sound, boo
 	{
 		EntityId itemEntId = pItemEnt->GetId();
 		IItem* pItem = GetItem(itemEntId);
-		CRY_ASSERT_MESSAGE(pItem, "Just spawned an entity assuming it was an item but it isn't");
+		CRY_ASSERT(pItem, "Just spawned an entity assuming it was an item but it isn't");
 		if (pItem)
 		{
 			// this may remove the entity
@@ -691,8 +695,11 @@ EntityId CItemSystem::GiveItem(IActor* pActor, const char* item, bool sound, boo
 			//[kirill] make sure AI gets notified about new item
 			if (gEnv->pAISystem)
 			{
-				if (IAIObject* pActorAI = pActor->GetEntity()->GetAI())
-					gEnv->pAISystem->SendSignal(SIGNALFILTER_SENDER, 0, "OnUpdateItems", pActorAI);
+				if (pActor->GetEntity()->HasAI())
+				{
+					const AISignals::SignalSharedPtr pSignal = gEnv->pAISystem->GetSignalManager()->CreateSignal(AISIGNAL_INCLUDE_DISABLED, gEnv->pAISystem->GetSignalManager()->GetBuiltInSignalDescriptions().GetOnUpdateItems(), pActor->GetEntityId());
+					gEnv->pAISystem->SendSignal(AISignals::ESignalFilter::SIGNALFILTER_SENDER, pSignal);
+				}
 			}
 
 			if ((pItemEnt = gEnv->pEntitySystem->GetEntity(itemEntId)) && !pItemEnt->IsGarbage())
@@ -868,7 +875,7 @@ void CItemSystem::CacheGeometry(const IItemParamsNode* geometry)
 //------------------------------------------------------------------------
 void CItemSystem::CacheItemGeometry(const char* className)
 {
-	LOADING_TIME_PROFILE_SECTION(gEnv->pSystem);
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY)(gEnv->pSystem);
 	if (m_itemParamsFlushed)
 		return;
 
@@ -892,7 +899,7 @@ void CItemSystem::CacheItemGeometry(const char* className)
 //------------------------------------------------------------------------
 void CItemSystem::CacheItemSound(const char* className)
 {
-	LOADING_TIME_PROFILE_SECTION(gEnv->pSystem);
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY)(gEnv->pSystem);
 	if (m_itemParamsFlushed)
 		return;
 
@@ -919,7 +926,7 @@ void CItemSystem::CacheItemSound(const char* className)
 							const IItemParamsNode* sound = actions->GetChild(i);
 							if (!stricmp(sound->GetName(), "sound"))
 							{
-								const char* soundName = sound->GetNameAttribute();
+								//const char* soundName = sound->GetNameAttribute();
 								REINST("do we still need this type of data priming?")
 								//gEnv->pSoundSystem->Precache(soundName, 0, FLAG_SOUND_PRECACHE_EVENT_DEFAULT);
 							}
@@ -1032,7 +1039,7 @@ void CItemSystem::ClearGeometryCache()
 //------------------------------------------------------------------------
 void CItemSystem::PrecacheLevel()
 {
-	FUNCTION_PROFILER(GetISystem(), PROFILE_ACTION);
+	CRY_PROFILE_FUNCTION(PROFILE_ACTION);
 
 	IEntitySystem* pEntitySystem = gEnv->pEntitySystem;
 
@@ -1066,7 +1073,7 @@ void CItemSystem::PreCacheLevelToLevelLoadout()
 {
 	IGameRules* pGameRules = CCryAction::GetCryAction()->GetIGameRulesSystem()->GetCurrentGameRules();
 
-	CRY_ASSERT_MESSAGE(pGameRules != NULL, "No game rules active, can not preload resources");
+	CRY_ASSERT(pGameRules != NULL, "No game rules active, can not preload resources");
 
 	if (pGameRules)
 	{
@@ -1110,7 +1117,7 @@ void CItemSystem::RegisterCVars()
 
 	// Auto complete
 #if !defined(_RELEASE)
-	assert(gEnv->pConsole);
+	CRY_ASSERT(gEnv->pConsole);
 	PREFAST_ASSUME(gEnv->pConsole);
 	gEnv->pConsole->RegisterAutoComplete("i_giveitem", &s_itemListAutoComplete);
 #endif // !defined(_RELEASE)
@@ -1140,7 +1147,6 @@ void CItemSystem::GiveItemCmd(IConsoleCmdArgs* args)
 		return;
 
 	IGameFramework* pGameFramework = gEnv->pGameFramework;
-	IActorSystem* pActorSystem = pGameFramework->GetIActorSystem();
 	IItemSystem* pItemSystem = pGameFramework->GetIItemSystem();
 
 	const char* itemName = args->GetArg(1);
@@ -1178,8 +1184,6 @@ void CItemSystem::GiveItemCmd(IConsoleCmdArgs* args)
 void CItemSystem::DropItemCmd(IConsoleCmdArgs* args)
 {
 	IGameFramework* pGameFramework = gEnv->pGameFramework;
-	IActorSystem* pActorSystem = pGameFramework->GetIActorSystem();
-	IItemSystem* pItemSystem = pGameFramework->GetIItemSystem();
 
 	const char* actorName = 0;
 
@@ -1232,7 +1236,6 @@ void CItemSystem::GiveItemsHelper(IConsoleCmdArgs* args, bool useGiveable, bool 
 		return;
 
 	IGameFramework* pGameFramework = gEnv->pGameFramework;
-	IActorSystem* pActorSystem = pGameFramework->GetIActorSystem();
 	CItemSystem* pItemSystem = static_cast<CItemSystem*>(pGameFramework->GetIItemSystem());
 
 	const char* actorName = 0;
@@ -1499,7 +1502,7 @@ int CItemSystem::GetItemParamsCount() const
 const char* CItemSystem::GetItemParamName(int index) const
 {
 	// FIXME: maybe return an iterator class, so get rid of advance (it's a map, argh)
-	assert(index >= 0 && index < m_params.size());
+	CRY_ASSERT(index >= 0 && index < m_params.size());
 	TItemParamsMap::const_iterator iter = m_params.begin();
 	std::advance(iter, index);
 	return iter->first.c_str();
@@ -1882,7 +1885,7 @@ void CItemSystem::ItemSystemErrorMessage(const char* fileName, const char* error
 
 	if (displayErrorDialog)
 	{
-		gEnv->pSystem->ShowMessage(messageBuffer.c_str(), "Error", eMB_Error);
+		CryMessageBox(messageBuffer.c_str(), "Error", eMB_Error);
 	}
 }
 

@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -22,6 +22,7 @@ namespace UQS
 		public:
 			// IUtils
 			virtual Client::IItemFactory*                           FindItemFactoryByType(const Shared::CTypeInfo& type) const override;
+			virtual const IQueryFactory&                            GetDefaultQueryFactory() const override;
 			// ~IUtils
 
 			// IFactoryDatabaseListener<Client::IItemFactory>

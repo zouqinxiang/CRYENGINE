@@ -1,4 +1,4 @@
-// Copyright 2001-2017 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "PerceptionActor.h"
@@ -6,8 +6,6 @@
 #include <CryAISystem/IAISystem.h>
 #include <CryAISystem/IAIObject.h>
 #include <CryAISystem/IAIActor.h>
-
-static const uint32 kOnCloseContactCRC = CCrc32::Compute("OnCloseContact");
 
 static const float kCloseContactTimeOutValue = 1.5f;
 
@@ -64,7 +62,7 @@ bool CPerceptionActor::IsEnabled() const
 //-----------------------------------------------------------------------------------------------------------
 void CPerceptionActor::CheckCloseContact(IAIObject* pTarget)
 {
-	FUNCTION_PROFILER(gEnv->pSystem, PROFILE_AI);
+	CRY_PROFILE_FUNCTION(PROFILE_AI);
 	if (CloseContactEnabled())
 	{
 		if (m_pAIActor->CastToIAIObject()->CastToIPuppet())
@@ -76,7 +74,7 @@ void CPerceptionActor::CheckCloseContact(IAIObject* pTarget)
 		const float distSq = Distance::Point_PointSq(m_pAIActor->CastToIAIObject()->GetPos(), pTarget->GetPos());
 		if (distSq < sqr(m_meleeRange))
 		{
-			m_pAIActor->SetSignal(1, "OnCloseContact", pTarget->GetEntity(), 0, kOnCloseContactCRC);
+			m_pAIActor->SetSignal(gEnv->pAISystem->GetSignalManager()->CreateSignal(AISIGNAL_DEFAULT, gEnv->pAISystem->GetSignalManager()->GetBuiltInSignalDescriptions().GetOnCloseContact(), pTarget->GetEntityID()));
 			
 			m_closeContactTimeOut = kCloseContactTimeOutValue;
 		}

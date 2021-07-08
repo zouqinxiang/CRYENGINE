@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
 	-------------------------------------------------------------------------
@@ -332,7 +332,7 @@ void CGameRulesObjective_PowerStruggle::Client_UpdateSoundSignalForNode(SNodeInf
 	{
 		CryWatch("Spear=%s is not playing audio signal!", m_pGameRules->GetEntityName(pNodeInfo->m_id));
 
-		CRY_ASSERT_MESSAGE(!pNodeInfo->m_havePlayedSignal, "we should only ever not be playing our signals if we've missed playing them by being a late joiner. Any other cases indicate something has gone wrong with the low-level sound code");
+		CRY_ASSERT(!pNodeInfo->m_havePlayedSignal, "we should only ever not be playing our signals if we've missed playing them by being a late joiner. Any other cases indicate something has gone wrong with the low-level sound code");
 
 		// This code has been re-enabled for late joiners to play signals if they're not already (they will miss the emerging of the spears that triggers the sounds)
 		// low level sound code has been fixed and this is no longer required for normal
@@ -421,7 +421,7 @@ void CGameRulesObjective_PowerStruggle::Common_HandleSpearCaptureStarting(SNodeI
 				CAnnouncer::GetInstance()->Announce("SpearEnemyCapturingC", CAnnouncer::eAC_inGame);
 				break;
 			default:
-				CRY_ASSERT_MESSAGE(0, string().Format("unhandled activeIdentityId=%d", pNodeInfo->m_activeIdentityId));
+				CRY_ASSERT(0, string().Format("unhandled activeIdentityId=%d", pNodeInfo->m_activeIdentityId));
 				break;
 		}
 	}
@@ -540,7 +540,7 @@ void CGameRulesObjective_PowerStruggle::Common_UpdateActiveNode(SNodeInfo *pNode
 			}
 			else
 			{
-				CRY_ASSERT_MESSAGE(!pActor, "now that the kill listener is correctly setup this shouldn't be possible, aside from perhaps some untracked disconnect resulting in a null actor");
+				CRY_ASSERT(!pActor, "now that the kill listener is correctly setup this shouldn't be possible, aside from perhaps some untracked disconnect resulting in a null actor");
 				boxEntities.removeAt(playerIndex);
 				-- playerIndex;
 				-- numInsideBox;
@@ -555,7 +555,6 @@ void CGameRulesObjective_PowerStruggle::Common_UpdateActiveNode(SNodeInfo *pNode
 	
 	if (gEnv->bServer && bCountsChanged)
 	{
-		int previousOwnerId = pNodeInfo->m_controllingTeamId;
 		int team1Count = pNodeInfo->m_insideCount[0];
 		int team2Count = pNodeInfo->m_insideCount[1];
 		int newControllingTeamId;
@@ -778,11 +777,11 @@ void CGameRulesObjective_PowerStruggle::Server_ActivateNode(int index)
 
 	if (m_setupIsSpecifyingNodeLetters)
 	{
-		CRY_ASSERT_MESSAGE(pNodeInfo->m_activeIdentityId != eAII_unknown_id, "we expect all nodes to have assigned active identity id when its been specified within the setup");
+		CRY_ASSERT(pNodeInfo->m_activeIdentityId != eAII_unknown_id, "we expect all nodes to have assigned active identity id when its been specified within the setup");
 	}
 	else
 	{
-		CRY_ASSERT_MESSAGE(pNodeInfo->m_activeIdentityId == eAII_unknown_id, "we expect inactive nodes to have no assigned active identity id");
+		CRY_ASSERT(pNodeInfo->m_activeIdentityId == eAII_unknown_id, "we expect inactive nodes to have no assigned active identity id");
 		pNodeInfo->m_activeIdentityId = CGameRulesObjective_PowerStruggle::s_nodeIdentityInfo[index+1].eIdentity;
 	}
 
@@ -834,18 +833,6 @@ void CGameRulesObjective_PowerStruggle::Server_ActivateAllNodes()
 	for (int i = 0; i < MAX_NODES; ++ i)
 	{
 		Server_ActivateNode(i);
-	}
-}
-
-	
-void CGameRulesObjective_PowerStruggle::Common_FixNodeRenderGlitch(SNodeInfo *pNodeInfo)
-{
-	IEntity* pNodeEntity = gEnv->pEntitySystem->GetEntity(pNodeInfo->m_id);
-	
-	// fix the 1 frame glitch of the spear fully emerged by forcing it to update whilst emerging, whether its rendered or not
-	if (pNodeEntity && (pNodeInfo->m_state == ENS_hidden || pNodeInfo->m_state == ENS_emerging)) 
-	{
-		pNodeEntity->Activate(true); 
 	}
 }
 
@@ -983,12 +970,6 @@ void CGameRulesObjective_PowerStruggle::Common_UpdateDebug(float frameTime)
 //------------------------------------------------------------------------
 void CGameRulesObjective_PowerStruggle::Update( float frameTime )
 {
-	for (int i = 0; i < MAX_NODES; ++ i)
-	{
-		SNodeInfo *pNodeInfo = &m_nodes[i];
-		Common_FixNodeRenderGlitch(pNodeInfo);
-	}
-
 	// for PC pre-game handling do nothing till we're actually in game 
 	if (!m_pGameRules->HasGameActuallyStarted() /*&& !m_pGameRules->IsPrematchCountDown()*/)
 	{
@@ -1254,8 +1235,8 @@ bool CGameRulesObjective_PowerStruggle::NetSerialize(TSerialize ser, EEntityAspe
 		for(int i = 0; i < NUM_TEAMS; ++i)
 		{
 			SChargeeInfo& chargee = m_Chargees[i];
-				
-			float prevChargeValueWas=chargee.m_PrevChargeValue;
+
+			//float prevChargeValueWas=chargee.m_PrevChargeValue;
 			float chargeValueWas=chargee.m_ChargeValue;
 
 			ser.Value("chargeValue", chargee.m_ChargeValue, 'sone');
@@ -1324,7 +1305,7 @@ void CGameRulesObjective_PowerStruggle::OnEntitySignal(EntityId entityId, int si
 				break;
 			}
 			default:
-				CRY_ASSERT_MESSAGE(0, string().Format("OnEntitySignal() unhandled signal %d", signal));
+				CRY_ASSERT(0, string().Format("OnEntitySignal() unhandled signal %d", signal));
 				break;
 		}
 	}
@@ -1332,12 +1313,12 @@ void CGameRulesObjective_PowerStruggle::OnEntitySignal(EntityId entityId, int si
 }
 
 //------------------------------------------------------------------------
-void CGameRulesObjective_PowerStruggle::OnEntityEvent( IEntity *pEntity, SEntityEvent &event )
+void CGameRulesObjective_PowerStruggle::OnEntityEvent( IEntity *pEntity, const SEntityEvent& event )
 {
 	EntityId insideId = (EntityId) event.nParam[0];
 	EntityId entityId = pEntity->GetId();
 	SNodeInfo *pNodeInfo=Common_FindNodeFromEntityId(entityId);
-	CRY_ASSERT_MESSAGE(pNodeInfo, "unable to find a node from the entity who's event we've received. This shouldn't happen");
+	CRY_ASSERT(pNodeInfo, "unable to find a node from the entity who's event we've received. This shouldn't happen");
 
 	if (event.event == ENTITY_EVENT_ENTERAREA)
 	{
@@ -1430,7 +1411,7 @@ void CGameRulesObjective_PowerStruggle::NodeCaptureStatusChanged(SNodeInfo *pNod
 					CAnnouncer::GetInstance()->AnnounceFromTeamId(teamId, "SpearCapturedC", CAnnouncer::eAC_inGame);
 					break;
 				default:
-					CRY_ASSERT_MESSAGE(0, string().Format("unhandled activeIdentityId=%d", pNodeInfo->m_activeIdentityId));
+					CRY_ASSERT(0, string().Format("unhandled activeIdentityId=%d", pNodeInfo->m_activeIdentityId));
 					break;
 			}
 		}
@@ -1452,7 +1433,7 @@ void CGameRulesObjective_PowerStruggle::Common_NewlyContestedSpear(SNodeInfo *pN
 			CAnnouncer::GetInstance()->Announce("SpearContendedC", CAnnouncer::eAC_inGame);
 			break;
 		default:
-			CRY_ASSERT_MESSAGE(0, string().Format("unhandled activeIdentityId=%d", pNodeInfo->m_activeIdentityId));
+			CRY_ASSERT(0, string().Format("unhandled activeIdentityId=%d", pNodeInfo->m_activeIdentityId));
 			break;
 	}
 }
@@ -2013,7 +1994,7 @@ bool CGameRulesObjective_PowerStruggle::Client_UpdateCaptureProgressBar( const S
 		}
 		break;
 	default:
-		CRY_ASSERT_MESSAGE(0, string().Format("unhandled capturingFrom=%d", capturingFrom));
+		CRY_ASSERT(0, string().Format("unhandled capturingFrom=%d", capturingFrom));
 		break;
 	}
 

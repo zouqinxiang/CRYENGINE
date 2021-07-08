@@ -1,17 +1,18 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "StickyProjectile.h"
 #include "Player.h"
 #include "WeaponSystem.h"
 #include "GamePhysicsSettings.h"
+#include <Cry3DEngine/ISurfaceType.h>
 
 namespace
 {
 	int GetJointIdFromPartId(IEntity& entity, const int partId, Vec3* pReturnPos = NULL)
 	{
 		ICharacterInstance* pCharInst = entity.GetCharacter(0);
-		int jointId = GetSlotIdx(partId, pCharInst && pCharInst->GetObjectType()==CGA);
+		int jointId = EntityPhysicsUtils::GetSlotIdx(partId, pCharInst && pCharInst->GetObjectType()==CGA);
 		CRY_ASSERT(pCharInst);
 		if(pCharInst)
 		{
@@ -382,7 +383,7 @@ bool CStickyProjectile::AttachToCharacter(CProjectile* pProjectile, IEntity& pEn
 	if(!pCharacterAttachment)
 	{
 		CryLogAlways("Could not create attachment for StickyProjectile[%s]. AttachmentName[%s] BoneName[%s]", pProjectileEntity->GetName(), attachName, boneName );
-		CRY_ASSERT_MESSAGE(pCharacterAttachment, "Could not create attachment for StickyProjectile. This must be fixed.");
+		CRY_ASSERT(pCharacterAttachment, "Could not create attachment for StickyProjectile. This must be fixed.");
 		return false;
 	}
 
@@ -565,7 +566,7 @@ void CStickyProjectile::SendHitInfo(const CProjectile* pProjectile, IEntity* pTa
 	}
 }
 
-void CStickyProjectile::OnEntityEvent( IEntity *pEntity,SEntityEvent &event )
+void CStickyProjectile::OnEntityEvent( IEntity *pEntity, const SEntityEvent& event )
 {
 	switch(event.event)
 	{

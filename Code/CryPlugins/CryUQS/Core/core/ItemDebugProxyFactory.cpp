@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "ItemDebugProxyFactory.h"
@@ -22,7 +22,7 @@ namespace UQS
 
 		IItemDebugProxy_Sphere& CItemDebugProxyFactory::CreateSphere()
 		{
-			assert(!m_pLastCreatedDebugItemRenderProxy);
+			CRY_ASSERT(!m_pLastCreatedDebugItemRenderProxy);
 			CItemDebugProxy_Sphere* pSphere = new CItemDebugProxy_Sphere;
 			m_pLastCreatedDebugItemRenderProxy.reset(pSphere);
 			return *pSphere;
@@ -30,7 +30,7 @@ namespace UQS
 
 		IItemDebugProxy_Path& CItemDebugProxyFactory::CreatePath()
 		{
-			assert(!m_pLastCreatedDebugItemRenderProxy);
+			CRY_ASSERT(!m_pLastCreatedDebugItemRenderProxy);
 			CItemDebugProxy_Path* pPath = new CItemDebugProxy_Path;
 			m_pLastCreatedDebugItemRenderProxy.reset(pPath);
 			return *pPath;
@@ -38,7 +38,7 @@ namespace UQS
 
 		IItemDebugProxy_AABB& CItemDebugProxyFactory::CreateAABB()
 		{
-			assert(!m_pLastCreatedDebugItemRenderProxy);
+			CRY_ASSERT(!m_pLastCreatedDebugItemRenderProxy);
 			CItemDebugProxy_AABB* pAABB = new CItemDebugProxy_AABB;
 			m_pLastCreatedDebugItemRenderProxy.reset(pAABB);
 			return *pAABB;

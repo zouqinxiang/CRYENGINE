@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
    -------------------------------------------------------------------------
@@ -274,9 +274,9 @@ struct ResponseHeader
 	uint32 lastCommandExecuted;
 
 	ResponseHeader()
-		: lastCommandReceived(0)
+		: msgType(PackedHeader::eCommand_ACK)
+		, lastCommandReceived(0)
 		, lastCommandExecuted(0)
-		, msgType(PackedHeader::eCommand_ACK)
 	{}
 
 	// serialization operator

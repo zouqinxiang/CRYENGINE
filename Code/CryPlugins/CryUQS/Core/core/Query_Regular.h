@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -99,13 +99,14 @@ namespace UQS
 
 			struct SInstantEvaluatorWithIndex
 			{
-				explicit                                          SInstantEvaluatorWithIndex(Client::InstantEvaluatorUniquePtr _pInstantEvaluator, Client::ParamsHolderUniquePtr _pParamsHolder, const Client::IInputParameterRegistry* _pInputParameterRegistry, size_t _originalIndexInQueryBlueprint);
+				explicit                                          SInstantEvaluatorWithIndex(Client::InstantEvaluatorUniquePtr _pInstantEvaluator, Client::ParamsHolderUniquePtr _pParamsHolder, const Client::IInputParameterRegistry* _pInputParameterRegistry, const CEvaluationResultTransform& _evaluationResultTransform, size_t _originalIndexInQueryBlueprint);
 				explicit                                          SInstantEvaluatorWithIndex(SInstantEvaluatorWithIndex&& other);
 				SInstantEvaluatorWithIndex&                       operator=(SInstantEvaluatorWithIndex&& other);
 
 				Client::InstantEvaluatorUniquePtr                 pInstantEvaluator;                    // instantiated exactly once for all items; gets re-used as it's stateless
 				Client::ParamsHolderUniquePtr                     pParamsHolder;                        // also instantiated exactly once; gets refreshed to on each item iteration before passing it into the instant-evaluator
 				const Client::IInputParameterRegistry*            pInputParameterRegistry;              // points back into the instant-evaluator factory (who owns it); used when making function calls to get the offsets of all parameters in memory so that each function knows where to write its return value to
+				CEvaluationResultTransform                        evaluationResultTransform;            // copy of the evaluation-result-transform that resides in the instant-evaluator-blueprint (we use a copy for cache-friendliness)
 				size_t                                            originalIndexInQueryBlueprint;        // the original position among the instant-evaluator blueprints in the query blueprint (*after* it was loaded from the datasource)
 			};
 
@@ -121,11 +122,12 @@ namespace UQS
 
 			struct SDeferredEvaluatorWithIndex
 			{
-				explicit                                          SDeferredEvaluatorWithIndex(Client::DeferredEvaluatorUniquePtr _pDeferredEvaluator, size_t _originalIndexInQueryBlueprint);
+				explicit                                          SDeferredEvaluatorWithIndex(Client::DeferredEvaluatorUniquePtr _pDeferredEvaluator, const CEvaluationResultTransform& _evaluationResultTransform, size_t _originalIndexInQueryBlueprint);
 				explicit                                          SDeferredEvaluatorWithIndex(SDeferredEvaluatorWithIndex&& other);
 				SDeferredEvaluatorWithIndex&                      operator=(SDeferredEvaluatorWithIndex&& other);
 
 				Client::DeferredEvaluatorUniquePtr                pDeferredEvaluator;                   // instantiated exactly once for all items; gets re-used as it's stateless
+				CEvaluationResultTransform                        evaluationResultTransform;            // copy of the evaluation-result-transform that resides in the deferred-evaluator-blueprint (we use a copy for cache-friendliness)
 				size_t                                            originalIndexInQueryBlueprint;        // the original position among the deferred-evaluator blueprints in the query blueprint as it was loaded from the datasource
 			};
 
@@ -164,8 +166,8 @@ namespace UQS
 			                                                      UQS_NON_COPYABLE(CQuery_Regular);
 
 			// CQueryBase
-			virtual bool                                          OnInstantiateFromQueryBlueprint(const Shared::IVariantDict& runtimeParams, Shared::CUqsString& error) override;
-			virtual EUpdateState                                  OnUpdate(Shared::CUqsString& error) override;
+			virtual bool                                          OnStart(const Shared::IVariantDict& runtimeParams, Shared::IUqsString& error) override;
+			virtual EUpdateState                                  OnUpdate(const CTimeValue& amountOfGrantedTime, Shared::CUqsString& error) override;
 			virtual void                                          OnCancel() override;
 			virtual void                                          OnGetStatistics(SStatistics& out) const override;
 			// ~CQueryBase
@@ -208,6 +210,9 @@ namespace UQS
 
 			// phase 2
 			CItemList                                             m_generatedItems;                                        // all the items that are being evaluated; this is kind of a read-only storage after they have been generated
+
+			// phase 3
+			size_t                                                m_currentItemIndexForCreatingDebugRepresentations;       // for continuing with creating debug-visualization and debug-proxies of all generated items in the next frame (in case we run out of time)
 
 			// phase 4
 			std::unique_ptr<SItemIterationContext>                m_pItemIterationContext;                                 // this gets instantiated right after all items got generated; it's used to provide the functions in the evaluation phase with the current item we're iterating on

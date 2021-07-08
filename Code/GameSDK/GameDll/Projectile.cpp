@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "Game.h"
@@ -11,6 +11,7 @@
 #include "Actor.h"
 #include "Player.h"
 
+#include <Cry3DEngine/ISurfaceType.h>
 #include <CryEntitySystem/IEntitySystem.h>
 #include <IItemSystem.h>
 #include <CryAISystem/IAgent.h>
@@ -28,6 +29,7 @@
 #include "AI/HazardModule/HazardModule.h"
 #include "AI/GameAIEnv.h"
 #include <IPerceptionManager.h>
+#include <CryAISystem/IAIObjectManager.h>
 
 #include "GameCodeCoverage/GameCodeCoverageTracker.h"
 #include "Weapon.h"
@@ -44,7 +46,6 @@ void RegisterEvents(IGameObjectExtension& goExt, IGameObject& gameObject)
 }
 
 using namespace HazardSystem;
-using namespace CryAudio;
 
 CRY_IMPLEMENT_GTI_BASE(CProjectile);
 
@@ -139,8 +140,8 @@ CProjectile::SElectricHitTarget::SElectricHitTarget(IPhysicalEntity* pProjectile
 
 //------------------------------------------------------------------------
 CProjectile::CProjectile()
-	: m_whizTriggerID(InvalidControlId),
-	m_ricochetTriggerID(InvalidControlId),
+	: m_whizTriggerID(CryAudio::InvalidControlId),
+	m_ricochetTriggerID(CryAudio::InvalidControlId),
 	//m_trailSoundId(INVALID_SOUNDID),
 	m_trailEffectId(0),
 	m_pPhysicalEntity(0),
@@ -461,13 +462,13 @@ bool CProjectile::Init(IGameObject* pGameObject)
 
 	float lifetime = m_pAmmoParams->lifetime;
 	if (lifetime > 0.0f)
-		pEntity->SetTimer(ePTIMER_LIFETIME, (int)(lifetime * 1000.0f));
+		SetTimer(ePTIMER_LIFETIME, (int)(lifetime * 1000.0f));
 
 	float showtime = m_pAmmoParams->showtime;
 	if (showtime > 0.0f)
 	{
 		pEntity->SetSlotFlags(0, pEntity->GetSlotFlags(0) & (~ENTITY_SLOT_RENDER));
-		pEntity->SetTimer(ePTIMER_SHOWTIME, (int)(showtime * 1000.0f));
+		SetTimer(ePTIMER_SHOWTIME, (int)(showtime * 1000.0f));
 	}
 	else
 		pEntity->SetSlotFlags(0, pEntity->GetSlotFlags(0) | ENTITY_SLOT_RENDER);
@@ -476,26 +477,21 @@ bool CProjectile::Init(IGameObject* pGameObject)
 
 	pEntity->SetFlags(flags | ENTITY_FLAG_NO_SAVE);
 
-	IAudioSystem const* const pIAudioSystem = gEnv->pAudioSystem;
-
-	if (pIAudioSystem != nullptr)
+	if (m_pAmmoParams->pRicochet)
 	{
-		if (m_pAmmoParams->pRicochet)
+		const string& ricochetTriggerName = m_pAmmoParams->pRicochet->audioTriggerName;
+		if (!ricochetTriggerName.empty())
 		{
-			const string& ricochetTriggerName = m_pAmmoParams->pRicochet->audioTriggerName;
-			if (!ricochetTriggerName.empty())
-			{
-				pIAudioSystem->GetAudioTriggerId(ricochetTriggerName.c_str(), m_ricochetTriggerID);
-			}
+			m_ricochetTriggerID = CryAudio::StringToId(ricochetTriggerName.c_str());
 		}
+	}
 
-		if (m_pAmmoParams->pWhiz)
+	if (m_pAmmoParams->pWhiz)
+	{
+		const string& whizTriggerName = m_pAmmoParams->pWhiz->audioTriggerName;
+		if (!whizTriggerName.empty())
 		{
-			const string& whizTriggerName = m_pAmmoParams->pWhiz->audioTriggerName;
-			if (!whizTriggerName.empty())
-			{
-				pIAudioSystem->GetAudioTriggerId(whizTriggerName.c_str(), m_whizTriggerID);
-			}
+			m_whizTriggerID = CryAudio::StringToId(whizTriggerName.c_str());
 		}
 	}
 
@@ -510,13 +506,13 @@ void CProjectile::ReInitFromPool()
 
 	float lifetime = m_pAmmoParams->lifetime;
 	if (lifetime > 0.0f)
-		GetEntity()->SetTimer(ePTIMER_LIFETIME, (int)(lifetime * 1000.0f));
+		SetTimer(ePTIMER_LIFETIME, (int)(lifetime * 1000.0f));
 
 	float showtime = m_pAmmoParams->showtime;
 	if (showtime > 0.0f)
 	{
 		GetEntity()->SetSlotFlags(0, GetEntity()->GetSlotFlags(0) & (~ENTITY_SLOT_RENDER));
-		GetEntity()->SetTimer(ePTIMER_SHOWTIME, (int)(showtime * 1000.0f));
+		SetTimer(ePTIMER_SHOWTIME, (int)(showtime * 1000.0f));
 	}
 	else
 		GetEntity()->SetSlotFlags(0, GetEntity()->GetSlotFlags(0) | ENTITY_SLOT_RENDER);
@@ -558,7 +554,7 @@ void CProjectile::ReInitFromPool()
 void CProjectile::SetLifeTime(float lifeTime)
 {
 	if (lifeTime > 0.0f)
-		GetEntity()->SetTimer(ePTIMER_LIFETIME, (int)(lifeTime * 1000.0f));
+		SetTimer(ePTIMER_LIFETIME, (int)(lifeTime * 1000.0f));
 }
 
 //------------------------------------------------------------------------
@@ -574,7 +570,7 @@ bool CProjectile::ReloadExtension(IGameObject* pGameObject, const SEntitySpawnPa
 {
 	ResetGameObject();
 	Proj::RegisterEvents(*this, *pGameObject);
-	CRY_ASSERT_MESSAGE(false, "CProjectile::ReloadExtension not implemented");
+	CRY_ASSERT(false, "CProjectile::ReloadExtension not implemented");
 
 	return false;
 }
@@ -582,7 +578,7 @@ bool CProjectile::ReloadExtension(IGameObject* pGameObject, const SEntitySpawnPa
 //------------------------------------------------------------------------
 bool CProjectile::GetEntityPoolSignature(TSerialize signature)
 {
-	CRY_ASSERT_MESSAGE(false, "CProjectile::GetEntityPoolSignature not implemented");
+	CRY_ASSERT(false, "CProjectile::GetEntityPoolSignature not implemented");
 
 	return true;
 }
@@ -639,9 +635,9 @@ void CProjectile::FullSerialize(TSerialize ser)
 //------------------------------------------------------------------------
 void CProjectile::Update(SEntityUpdateContext& ctx, int updateSlot)
 {
-	FUNCTION_PROFILER(GetISystem(), PROFILE_GAME);
+	CRY_PROFILE_FUNCTION(PROFILE_GAME);
 
-	CRY_ASSERT_MESSAGE(!RequiresDelayedDestruct() || gEnv->bMultiplayer, "The mpProjectileDestructDelay ammo params should only ever be greater than zero in Multiplayer");
+	CRY_ASSERT(!RequiresDelayedDestruct() || gEnv->bMultiplayer, "The mpProjectileDestructDelay ammo params should only ever be greater than zero in Multiplayer");
 
 	// we need to destroy this projectile
 	if (CheckAnyProjectileFlags(ePFlag_needDestruction) && !GetEntity()->IsKeptAlive())
@@ -727,7 +723,7 @@ void CProjectile::HandleEvent(const SGameObjectEvent& event)
 		return;
 	}
 
-	FUNCTION_PROFILER(GetISystem(), PROFILE_GAME);
+	CRY_PROFILE_FUNCTION(PROFILE_GAME);
 
 	if (event.event == eGFE_OnPostStep && (event.flags & eGOEF_LoggedPhysicsEvent) == 0)
 	{
@@ -829,7 +825,7 @@ bool CProjectile::ProcessCollisionEvent(IEntity* pTarget) const
 }
 
 //------------------------------------------------------------------------
-void CProjectile::ProcessEvent(SEntityEvent& event)
+void CProjectile::ProcessEvent(const SEntityEvent& event)
 {
 	switch (event.event)
 	{
@@ -864,6 +860,11 @@ void CProjectile::ProcessEvent(SEntityEvent& event)
 		}
 		break;
 	}
+}
+
+Cry::Entity::EventFlags CProjectile::GetEventMask() const
+{
+	return ENTITY_EVENT_TIMER;
 }
 
 //------------------------------------------------------------------------
@@ -1127,8 +1128,8 @@ void CProjectile::Destroy()
 			m_mpDestructionDelay = m_pAmmoParams->mpProjectileDestructDelay;
 		}
 		SetProjectileFlags(ePFlag_needDestruction);
-		GetEntity()->RegisterInAISystem(AIObjectParams(0));                         // unregister from AI. Will be removed from active list when hidden otherwise (see EvaluateUpdateActivation)
-		GetEntity()->SetFlags(GetEntity()->GetFlags() | ENTITY_FLAG_UPDATE_HIDDEN); // Bugfix for grenades persisting on client after exploding.
+		gEnv->pAISystem->GetAIObjectManager()->RemoveObjectByEntityId(GetEntityId()); // unregister from AI. Will be removed from active list when hidden otherwise (see EvaluateUpdateActivation)
+		GetEntity()->SetFlags(GetEntity()->GetFlags() | ENTITY_FLAG_UPDATE_HIDDEN);   // Bugfix for grenades persisting on client after exploding.
 		GetEntity()->Hide(true);
 		return;
 	}
@@ -1279,7 +1280,7 @@ void CProjectile::Explode(const SExplodeDesc& explodeDesc)
 				{
 					char msg[1024] = { 0 };
 					cry_sprintf(msg, "missing network safe class id for entity class %s", GetEntity()->GetClass()->GetName());
-					CRY_ASSERT_MESSAGE(false, msg);
+					CRY_ASSERT(false, msg);
 				}
 #endif
 			}
@@ -1341,7 +1342,7 @@ void CProjectile::TrailSound(bool enable, const Vec3& dir)
 //------------------------------------------------------------------------
 void CProjectile::UpdateWhiz(const Vec3& pos, bool destroy)
 {
-	if (m_pAmmoParams->pWhiz && m_whizTriggerID != InvalidControlId && !IsEquivalent(m_last, pos))
+	if (m_pAmmoParams->pWhiz && m_whizTriggerID != CryAudio::InvalidControlId && !IsEquivalent(m_last, pos))
 	{
 		IActor* pClientActor = g_pGame->GetIGameFramework()->GetClientActor();
 		if (pClientActor && (m_ownerId != pClientActor->GetEntityId()))
@@ -1419,14 +1420,14 @@ void CProjectile::UpdateWhiz(const Vec3& pos, bool destroy)
 //------------------------------------------------------------------------
 void CProjectile::WhizSound(const Vec3& pos)
 {
-	SExecuteTriggerData const data("WhizBy", eOcclusionType_Ignore, pos, true, m_whizTriggerID);
+	CryAudio::SExecuteTriggerData const data(m_whizTriggerID, "WhizBy", CryAudio::EOcclusionType::Ignore, pos, INVALID_ENTITYID, true);
 	gEnv->pAudioSystem->ExecuteTriggerEx(data);
 }
 
 //------------------------------------------------------------------------
 void CProjectile::RicochetSound(const Vec3& pos)
 {
-	SExecuteTriggerData const data("Ricochet", eOcclusionType_Ignore, pos, true, m_ricochetTriggerID);
+	CryAudio::SExecuteTriggerData const data(m_ricochetTriggerID, "Ricochet", CryAudio::EOcclusionType::Ignore, pos, INVALID_ENTITYID, true);
 	gEnv->pAudioSystem->ExecuteTriggerEx(data);
 }
 
@@ -1803,7 +1804,7 @@ void CProjectile::InitWithAI()
 				unsigned short int nOwnerType = pOwnerAI->GetAIType();
 				if (nOwnerType != AIOBJECT_ACTOR)
 				{
-					GetEntity()->RegisterInAISystem(AIObjectParams(m_pAmmoParams->aiType));
+					gEnv->pAISystem->GetAIObjectManager()->CreateAIObject(AIObjectParams(m_pAmmoParams->aiType, 0, GetEntityId()));
 				}
 			}
 		}
@@ -2036,8 +2037,6 @@ bool CProjectile::ProximityDetector_MP(float proxyRadius)
 	CActor* pOwnerActor = static_cast<CActor*>(pActorSystem->GetActor(m_ownerId));
 	if (!pOwnerActor || pOwnerActor->IsDead())
 		return false;
-
-	CGameRules* pGameRules = g_pGame->GetGameRules();
 
 	const static IEntityClass* sVTOLClass = gEnv->pEntitySystem->GetClassRegistry()->FindClass(CVTOLVehicleManager::s_VTOLClassName);
 

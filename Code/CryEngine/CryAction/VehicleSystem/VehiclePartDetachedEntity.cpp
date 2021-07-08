@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
    -------------------------------------------------------------------------
@@ -20,7 +20,6 @@
 #include <CryAnimation/ICryAnimation.h>
 #include <IActorSystem.h>
 #include <CryNetwork/ISerialize.h>
-#include <CryAISystem/IAgent.h>
 
 #include "CryAction.h"
 #include "Vehicle.h"
@@ -74,7 +73,7 @@ bool CVehiclePartDetachedEntity::ReloadExtension(IGameObject* pGameObject, const
 //------------------------------------------------------------------------
 void CVehiclePartDetachedEntity::InitVehiclePart(IGameObject* pGameObject)
 {
-	assert(pGameObject);
+	CRY_ASSERT(pGameObject);
 
 	// Set so we receive render events (when GO is set to update due to being visible), allowing last seen timer to reset
 	pGameObject->EnableUpdateSlot(this, 0);
@@ -113,12 +112,17 @@ void CVehiclePartDetachedEntity::Update(SEntityUpdateContext& ctx, int slot)
 }
 
 //------------------------------------------------------------------------
-void CVehiclePartDetachedEntity::ProcessEvent(SEntityEvent& event)
+void CVehiclePartDetachedEntity::ProcessEvent(const SEntityEvent& event)
 {
 	if (event.event == ENTITY_EVENT_RESET)
 	{
 		gEnv->pEntitySystem->RemoveEntity(GetEntity()->GetId());
 	}
+}
+
+Cry::Entity::EventFlags CVehiclePartDetachedEntity::GetEventMask() const
+{
+	return ENTITY_EVENT_RESET;
 }
 
 //------------------------------------------------------------------------

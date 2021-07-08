@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
 *************************************************************************/
@@ -86,7 +86,7 @@ private:
 
 	ILINE const char* GetStringRealPointer(StringID ID, const SAddr*& addr) const
 	{
-		assert(ID != XMLCPB_INVALID_ID);
+		CRY_ASSERT(ID != XMLCPB_INVALID_ID);
 
 		if (ID == SEARCHING_ID)
 		{

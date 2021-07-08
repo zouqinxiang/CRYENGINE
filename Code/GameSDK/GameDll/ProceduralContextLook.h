@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #ifndef __PROCEDURAL_CONTEXT_LOOK__H__
 #define __PROCEDURAL_CONTEXT_LOOK__H__
@@ -17,7 +17,7 @@ class CProceduralContextLook
 	: public IProceduralContext
 {
 public:
-	PROCEDURAL_CONTEXT( CProceduralContextLook, "ProceduralContextLook", 0x0928592BD91648A5, 0x9024C8221945BB17 );
+	PROCEDURAL_CONTEXT(CProceduralContextLook, "ProceduralContextLook", "0928592b-d916-48a5-9024-c8221945bb17"_cry_guid);
 
 	CProceduralContextLook();
 	virtual ~CProceduralContextLook() {}

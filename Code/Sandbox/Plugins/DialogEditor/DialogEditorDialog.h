@@ -1,14 +1,14 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
 #include "DialogScriptView.h"
 #include "Controls/ColorCtrl.h"
-#include "Util/Variable.h"
 
 class CBaseObject;
 class CEntityObject;
 class CDialogManager;
+struct IVariable;
 
 #define DIALOG_EDITOR_NAME "Dialog Editor"
 #define DIALOG_EDITOR_VER  "1.00"
@@ -24,14 +24,14 @@ protected:
 	//{{AFX_MSG(CFlatFramed)
 	afx_msg void OnNcPaint();
 	//}}AFX_MSG
-	DECLARE_TEMPLATE_MESSAGE_MAP()
+	DECLARE_MESSAGE_MAP()
 };
 
-BEGIN_TEMPLATE_MESSAGE_MAP_CUSTOM(class BASE_TYPE, CFlatFramed<BASE_TYPE>, BASE_TYPE)
+BEGIN_TEMPLATE_MESSAGE_MAP(CFlatFramed, BASE_TYPE, BASE_TYPE)
 //{{AFX_MSG_MAP(CFlatFramed)
 ON_WM_NCPAINT()
 //}}AFX_MSG_MAP
-END_TEMPLATE_MESSAGE_MAP_CUSTOM()
+END_MESSAGE_MAP()
 
 template<class BASE_TYPE>
 void CFlatFramed<BASE_TYPE >::OnNcPaint()
@@ -106,7 +106,6 @@ public:
 	BOOL           Create(DWORD dwStyle, const RECT& rect, CWnd* pParentWnd);
 	CXTPTaskPanel& GetTaskPanel() { return m_taskPanel; }
 
-	void           OnObjectEvent(CBaseObject* object, int event);
 	void           RecalcLayout(BOOL bNotify = TRUE);
 
 protected:

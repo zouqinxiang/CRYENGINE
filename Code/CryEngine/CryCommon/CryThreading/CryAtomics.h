@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -14,6 +14,9 @@ LONG CryInterlockedDecrement(int volatile* pDst);
 
 // Returns the resulting added value
 LONG CryInterlockedAdd(volatile LONG* pVal, LONG add);
+
+// Returns the resulting added value
+int64 CryInterlockedAdd(volatile int64* pVal, int64 add);
 
 // Returns the resulting added value
 size_t CryInterlockedAdd(volatile size_t* pVal, size_t add);
@@ -47,10 +50,8 @@ LONG CryInterlockedCompareExchange(volatile LONG* pDst, LONG exchange, LONG comp
 // Returns initial value prior exchange
 int64 CryInterlockedCompareExchange64(volatile int64* pDst, int64 exchange, int64 comperand);
 
-#if CRY_PLATFORM_64BIT
 // Returns initial value prior exchange
 unsigned char CryInterlockedCompareExchange128(volatile int64* pDst, int64 exchangeHigh, int64 exchangeLow, int64* comparandResult);
-#endif
 
 // Returns initial address prior exchange
 void* CryInterlockedCompareExchangePointer(void* volatile* pDst, void* pExchange, void* pComperand);
@@ -62,13 +63,7 @@ void* CryInterlockedCompareExchangePointer(void* volatile* pDst, void* pExchange
 // there are implemented in the platform specific CryThread_*.h files
 //NOTE: The sizes are verified at compile-time in the implementation functions, but this is still ugly
 
-#if CRY_PLATFORM_64BIT
-	#define LOCK_FREE_LINKED_LIST_DOUBLE_SIZE_PTR_ALIGN 16
-#elif CRY_PLATFORM_32BIT
-	#define LOCK_FREE_LINKED_LIST_DOUBLE_SIZE_PTR_ALIGN 8
-#else
-	#error "Unsupported plaform"
-#endif
+#define LOCK_FREE_LINKED_LIST_DOUBLE_SIZE_PTR_ALIGN 16
 
 struct SLockFreeSingleLinkedListEntry
 {
@@ -107,11 +102,7 @@ private:
 	// Only need "salt" on platforms using CAS (ORBIS uses embedded salt)
 #elif CRY_PLATFORM_POSIX
 	// If pointers 32bit, salt should be as well. Otherwise we get 4 bytes of padding between pNext and salt and CAS operations fail
-	#if CRY_PLATFORM_64BIT
 	volatile uint64 salt;
-	#else
-	volatile uint32 salt;
-	#endif
 #endif
 };
 static_assert(std::alignment_of<SLockFreeSingleLinkedListHeader>::value == sizeof(uintptr_t) * 2, "Alignment failure for SLockFreeSingleLinkedListHeader");
@@ -141,7 +132,7 @@ ILINE void CrySpinLock(volatile int* pLock, int checkVal, int setVal)
 	CSimpleThreadBackOff threadBackoff;
 	while (CryInterlockedCompareExchange((volatile LONG*)pLock, setVal, checkVal) != checkVal)
 	{
-		threadBackoff.backoff();
+		threadBackoff.Backoff();
 	}
 }
 
@@ -152,7 +143,7 @@ ILINE void CryReleaseSpinLock(volatile int* pLock, int setVal)
 
 ILINE void CryReadLock(volatile int* rw)
 {
-	CryInterlockedAdd(rw, 1);
+	CryInterlockedIncrement(rw);
 #ifdef NEED_ENDIAN_SWAP
 	volatile char* pw = (volatile char*)rw + 1;
 #else
@@ -162,13 +153,13 @@ ILINE void CryReadLock(volatile int* rw)
 	CSimpleThreadBackOff backoff;
 	for (; *pw; )
 	{
-		backoff.backoff();
+		backoff.Backoff();
 	}
 }
 
 ILINE void CryReleaseReadLock(volatile int* rw)
 {
-	CryInterlockedAdd(rw, -1);
+	CryInterlockedDecrement(rw);
 }
 
 ILINE void CryWriteLock(volatile int* rw)
@@ -266,7 +257,7 @@ private:
 //////////////////////////////////////////////////////////////////////////
 struct WriteLockCond
 {
-	WriteLockCond(volatile int& rw, int bActive = 1) : prw(&rw), iActive(0)
+	WriteLockCond(volatile int& rw, int bActive = 1) : iActive(0), prw(&rw)
 	{
 		if (bActive)
 		{

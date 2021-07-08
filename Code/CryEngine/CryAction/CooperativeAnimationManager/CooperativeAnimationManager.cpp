@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
    -------------------------------------------------------------------------
@@ -68,7 +68,7 @@ bool CCooperativeAnimationManager::StartNewCooperativeAnimation(TCharacterParams
 	if (!newAnimation->Init(characterParams, generalParams))
 	{
 		// if initialization fails for some reason, don't continue
-		CRY_ASSERT_MESSAGE(0, "Cannot initialize cooperative animation. Init returned false.");
+		CRY_ASSERT(0, "Cannot initialize cooperative animation. Init returned false.");
 		CryLogAlways("Cannot initialize cooperative animation. Init returned false.");
 		SAFE_DELETE(newAnimation);
 		return false;
@@ -122,7 +122,7 @@ bool CCooperativeAnimationManager::StartExactPositioningAnimation(const SCharact
 	if (!newAnimation->InitForOne(params, generalParams))
 	{
 		// if initialization fails for some reason, don't continue
-		CRY_ASSERT_MESSAGE(0, "Cannot initialize cooperative animation. Init returned false.");
+		CRY_ASSERT(0, "Cannot initialize cooperative animation. Init returned false.");
 		CryLogAlways("Cannot initialize cooperative animation. Init returned false.");
 		SAFE_DELETE(newAnimation);
 		return false;
@@ -135,7 +135,7 @@ bool CCooperativeAnimationManager::StartExactPositioningAnimation(const SCharact
 
 void CCooperativeAnimationManager::Update(float dt)
 {
-	FUNCTION_PROFILER(GetISystem(), PROFILE_GAME);
+	CRY_PROFILE_FUNCTION(PROFILE_GAME);
 
 	// if there are no active animations get right back
 	if (m_activeAnimations.empty())

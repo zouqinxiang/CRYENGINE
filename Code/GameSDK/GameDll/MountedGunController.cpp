@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
 -------------------------------------------------------------------------
@@ -47,7 +47,16 @@ SMountedGunCRCs MountedGunCRCs;
 
 void CMountedGunController::Update(EntityId mountedGunID, float frameTime)
 {
-	CRY_ASSERT_MESSAGE(m_pControlledPlayer, "Controlled player not initialized");
+	CRY_ASSERT(m_pControlledPlayer, "Controlled player not initialized");
+
+	// Animation state needs to be updated when the player switched between first and third person view
+	if (m_PreviousThirdPersonState != m_pControlledPlayer->IsThirdPerson())
+	{
+		m_PreviousThirdPersonState = m_pControlledPlayer->IsThirdPerson();
+
+		OnLeave();
+		OnEnter(mountedGunID);
+	}
 
 	CItem* pMountedGun = static_cast<CItem*>(gEnv->pGameFramework->GetIItemSystem()->GetItem(mountedGunID));
 
@@ -147,7 +156,9 @@ void CMountedGunController::Update(EntityId mountedGunID, float frameTime)
 
 void CMountedGunController::OnEnter(EntityId mountedGunId)
 {
-	CRY_ASSERT_MESSAGE(m_pControlledPlayer, "Controlled player not initialized");
+	m_PreviousThirdPersonState = m_pControlledPlayer->IsThirdPerson();
+
+	CRY_ASSERT(m_pControlledPlayer, "Controlled player not initialized");
 
 	ICharacterInstance* pCharacter = m_pControlledPlayer->IsThirdPerson() ? m_pControlledPlayer->GetEntity()->GetCharacter(0) : m_pControlledPlayer->GetShadowCharacter();
 	if (pCharacter)
@@ -201,7 +212,7 @@ void CMountedGunController::OnEnter(EntityId mountedGunId)
 
 void CMountedGunController::OnLeave( )
 {
-	CRY_ASSERT_MESSAGE(m_pControlledPlayer, "Controlled player not initialized");
+	CRY_ASSERT(m_pControlledPlayer, "Controlled player not initialized");
 
 	ICharacterInstance* pCharacter = m_pControlledPlayer->IsThirdPerson() ? m_pControlledPlayer->GetEntity()->GetCharacter(0) : m_pControlledPlayer->GetShadowCharacter();
 	if (pCharacter)
@@ -252,7 +263,6 @@ void CMountedGunController::UpdateGunnerLocation( CItem* pMountedGun, IEntity* p
 		characterTM.SetTranslation(playerOffset);
 
 		IEntity* pControlledPlayerEntity = m_pControlledPlayer->GetEntity();
-		IVehicle *pVehicle = NULL;
 
 		if (gEnv->bMultiplayer && m_pControlledPlayer->IsClient() && m_pControlledPlayer->GetLinkedVehicle())
 		{

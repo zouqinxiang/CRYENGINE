@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -17,7 +17,7 @@ public:
 	virtual ~CSmartObjectEventDialog();
 
 	void    SetSOEvent(const CString& sSOEvent) { m_sSOEvent = sSOEvent; }
-	CString GetSOEvent()                        { return m_sSOEvent; };
+	CString GetSOEvent()                        { return m_sSOEvent; }
 
 	// Dialog Data
 	enum { IDD = IDD_AIANCHORS };

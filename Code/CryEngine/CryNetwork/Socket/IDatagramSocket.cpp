@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "Config.h"
@@ -140,7 +140,7 @@ public:
 template<>
 IDatagramSocketPtr SOpenSocketVisitor::CreateFromVariant<stl::variant_size<TNetAddress>::value>(const TNetAddress& var)
 {
-	CRY_ASSERT_MESSAGE(false, "Invalid variant index.");
+	CRY_ASSERT(false, "Invalid variant index.");
 	return nullptr;
 }
 

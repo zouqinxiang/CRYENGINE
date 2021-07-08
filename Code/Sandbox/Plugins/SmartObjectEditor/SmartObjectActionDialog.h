@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -17,7 +17,7 @@ public:
 	virtual ~CSmartObjectActionDialog();
 
 	void    SetSOAction(const CString& sSOAction) { m_sSOAction = sSOAction; }
-	CString GetSOAction()                         { return m_sSOAction; };
+	CString GetSOAction()                         { return m_sSOAction; }
 
 	// Dialog Data
 	enum { IDD = IDD_AIANCHORS };
@@ -34,4 +34,7 @@ protected:
 	afx_msg void OnRefreshBtn();
 public:
 	virtual BOOL OnInitDialog();
+
+private:
+	void GetSmartObjectActions(std::vector<string>& values) const;
 };

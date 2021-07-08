@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "FlowVehicleSeat.h"
@@ -76,7 +76,7 @@ void CFlowVehicleSeat::ProcessEvent(EFlowEvent event, SActivationInfo* pActInfo)
 							enumLockType = eVSLS_LockedForAI;
 							break;
 						default:
-							assert(false);
+							CRY_ASSERT(false);
 							break;
 						}
 						pSeat->SetLocked(enumLockType);
@@ -248,7 +248,7 @@ public:
 				break;
 
 			default:
-				assert(false);
+				CRY_ASSERT(false);
 				break;
 			}
 		}

@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "DeferredEvaluatorBlueprint.h"
@@ -12,110 +12,69 @@ namespace UQS
 
 		//===================================================================================
 		//
-		// CTextualDeferredEvaluatorBlueprint
-		//
-		//===================================================================================
-
-		CTextualDeferredEvaluatorBlueprint::CTextualDeferredEvaluatorBlueprint()
-			: m_weight(1.0)
-		{
-		}
-
-		void CTextualDeferredEvaluatorBlueprint::SetEvaluatorName(const char* szEvaluatorName)
-		{
-			m_evaluatorName = szEvaluatorName;
-		}
-
-		ITextualInputBlueprint& CTextualDeferredEvaluatorBlueprint::GetInputRoot()
-		{
-			return m_rootInput;
-		}
-
-		const char* CTextualDeferredEvaluatorBlueprint::GetEvaluatorName() const
-		{
-			return m_evaluatorName.c_str();
-		}
-
-		const ITextualInputBlueprint& CTextualDeferredEvaluatorBlueprint::GetInputRoot() const
-		{
-			return m_rootInput;
-		}
-
-		void CTextualDeferredEvaluatorBlueprint::SetWeight(float weight)
-		{
-			m_weight = weight;
-		}
-
-		float CTextualDeferredEvaluatorBlueprint::GetWeight() const
-		{
-			return m_weight;
-		}
-
-		void CTextualDeferredEvaluatorBlueprint::SetSyntaxErrorCollector(DataSource::SyntaxErrorCollectorUniquePtr pSyntaxErrorCollector)
-		{
-			m_pSyntaxErrorCollector = std::move(pSyntaxErrorCollector);
-		}
-
-		DataSource::ISyntaxErrorCollector* CTextualDeferredEvaluatorBlueprint::GetSyntaxErrorCollector() const
-		{
-			return m_pSyntaxErrorCollector.get();
-		}
-
-		//===================================================================================
-		//
 		// CDeferredEvaluatorBlueprint
 		//
 		//===================================================================================
 
 		CDeferredEvaluatorBlueprint::CDeferredEvaluatorBlueprint()
 			: m_pDeferredEvaluatorFactory(nullptr)
-			, m_weight(1.0f)
-		{}
-
-		bool CDeferredEvaluatorBlueprint::Resolve(const ITextualDeferredEvaluatorBlueprint& source, const CQueryBlueprint& queryBlueprintForGlobalParamChecking)
 		{
-			const char* szEvaluatorName = source.GetEvaluatorName();
-
-			m_pDeferredEvaluatorFactory = g_pHub->GetDeferredEvaluatorFactoryDatabase().FindFactoryByName(szEvaluatorName);
-			if (!m_pDeferredEvaluatorFactory)
-			{
-				if (DataSource::ISyntaxErrorCollector* pSE = source.GetSyntaxErrorCollector())
-				{
-					pSE->AddErrorMessage("Unknown DeferredEvaluatorFactory '%s'", szEvaluatorName);
-				}
-				return false;
-			}
-
-			m_weight = source.GetWeight();
-
-			CInputBlueprint inputRoot;
-			const ITextualInputBlueprint& textualInputRoot = source.GetInputRoot();
-			const Client::IInputParameterRegistry& inputParamsReg = m_pDeferredEvaluatorFactory->GetInputParameterRegistry();
-
-			if (!inputRoot.Resolve(textualInputRoot, inputParamsReg, queryBlueprintForGlobalParamChecking, false))
-			{
-				return false;
-			}
-
-			ResolveInputs(inputRoot);
-
-			return true;
+			// nothing
 		}
 
 		Client::IDeferredEvaluatorFactory& CDeferredEvaluatorBlueprint::GetFactory() const
 		{
-			assert(m_pDeferredEvaluatorFactory);
+			CRY_ASSERT(m_pDeferredEvaluatorFactory);
 			return *m_pDeferredEvaluatorFactory;
-		}
-
-		float CDeferredEvaluatorBlueprint::GetWeight() const
-		{
-			return m_weight;
 		}
 
 		void CDeferredEvaluatorBlueprint::PrintToConsole(CLogger& logger, const char* szMessagePrefix) const
 		{
-			logger.Printf("%s%s (weight = %f)", szMessagePrefix, m_pDeferredEvaluatorFactory->GetName(), m_weight);
+			const CEvaluationResultTransform& evaluationResultTransform = GetEvaluationResultTransform();
+			const EScoreTransformType scoreTransformType = evaluationResultTransform.GetScoreTransformType();
+			const IScoreTransformFactory* pScoreTransformFactory = g_pHub->GetScoreTransformFactoryDatabase().FindFactoryByCallback([scoreTransformType](const IScoreTransformFactory& scoreTransformFactory) { return scoreTransformFactory.GetScoreTransformType() == scoreTransformType; });
+
+			logger.Printf("%s%s (weight = %f, scoreTransform = %s, negateDiscard = %s)",
+				szMessagePrefix,
+				m_pDeferredEvaluatorFactory->GetName(),
+				GetWeight(),
+				pScoreTransformFactory ? pScoreTransformFactory->GetName() : "(unknown scoreTransform - cannot happen)",
+				evaluationResultTransform.GetNegateDiscard() ? "true" : "false"
+			);
+
+			//logger.Printf("%s%s (weight = %f)", szMessagePrefix, m_pDeferredEvaluatorFactory->GetName(), GetWeight());
+		}
+
+		bool CDeferredEvaluatorBlueprint::ResolveFactory(const ITextualEvaluatorBlueprint& source)
+		{
+			const CryGUID& evaluatorGUID = source.GetEvaluatorGUID();
+			const char* szEvaluatorName = source.GetEvaluatorName();
+
+			//
+			// deferred-evaluator factory: first search by its GUID, then by its name
+			//
+
+			if (!(m_pDeferredEvaluatorFactory = g_pHub->GetDeferredEvaluatorFactoryDatabase().FindFactoryByGUID(evaluatorGUID)))
+			{
+				if (!(m_pDeferredEvaluatorFactory = g_pHub->GetDeferredEvaluatorFactoryDatabase().FindFactoryByName(szEvaluatorName)))
+				{
+					if (DataSource::ISyntaxErrorCollector* pSE = source.GetSyntaxErrorCollector())
+					{
+						Shared::CUqsString guidAsString;
+						Shared::Internal::CGUIDHelper::ToString(evaluatorGUID, guidAsString);
+						pSE->AddErrorMessage("Unknown DeferredEvaluatorFactory: GUID = %s, name = '%s'", guidAsString.c_str(), szEvaluatorName);
+					}
+					return false;
+				}
+			}
+
+			return true;
+		}
+
+		const Client::IInputParameterRegistry& CDeferredEvaluatorBlueprint::GetInputParameterRegistry() const
+		{
+			CRY_ASSERT(m_pDeferredEvaluatorFactory);
+			return m_pDeferredEvaluatorFactory->GetInputParameterRegistry();
 		}
 
 	}

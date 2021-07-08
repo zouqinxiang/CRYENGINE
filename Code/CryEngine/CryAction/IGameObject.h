@@ -1,15 +1,9 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #ifndef __IGAMEOBJECT_H__
 #define __IGAMEOBJECT_H__
 
 #pragma once
-
-// FIXME: Cell SDK GCC bug workaround.
-#ifndef __IGAMEOBJECTSYSTEM_H__
-	#include "IGameObjectSystem.h"
-#endif
-
 #define GAME_OBJECT_SUPPORTS_CUSTOM_USER_DATA 1
 
 #include <CryEntitySystem/IEntityComponent.h>
@@ -20,6 +14,7 @@
 #include <CryMemory/PoolAllocator.h>
 #include <CryFlowGraph/IFlowSystem.h>
 #include <CryNetwork/Rmi.h>
+#include "IGameObjectSystem.h"
 
 inline void GameWarning(const char*, ...) PRINTF_PARAMS(1, 2);
 
@@ -434,11 +429,9 @@ protected:
 
 	static const SGameObjectExtensionRMI* Helper_AddMessage(SGameObjectExtensionRMI::DecoderFunction decoder, const char* description, ERMIAttachmentType attach, bool isServerCall, ENetReliabilityType reliability, bool lowDelay)
 	{
-		if (ms_statics.m_nMessages >= MAX_STATIC_MESSAGES)
+		if (!CRY_VERIFY(ms_statics.m_nMessages < MAX_STATIC_MESSAGES))
 		{
-			// Assert or CryFatalError here uses gEnv, which is not yet initialized.
-			__debugbreak();
-			((void (*)())NULL)();
+			CryFatalError("Maximum number of remote messages exceeded.");
 			return NULL;
 		}
 		SGameObjectExtensionRMI& rmi = ms_statics.m_vMessages[ms_statics.m_nMessages++];
@@ -599,15 +592,42 @@ struct IGameObjectView
 	virtual void PostUpdateView(SViewParams& params) = 0;
 };
 
+// Declare game object as deprecated except for the legacy modules that expose functionality for it
+#if !defined(eCryModule) || (eCryModule != eCryM_GameFramework && eCryModule != eCryM_LegacyGameDLL \
+	&& eCryModule != eCryM_FlowGraph && eCryModule != eCryM_Editor && eCryModule != eCryM_Movie     \
+	&& eCryModule != eCryM_Legacy && eCryModule != eCryM_Schematyc2)
+
+	#define CRY_DEPRECATED_GAMEOBJECT CRY_DEPRECATED("(v5.4) IGameObjectExtension has been replaced with IEntityComponent, and will be removed in a future update.")
+
+#else
+	#define CRY_DEPRECATED_GAMEOBJECT
+#endif
+
 // Summary
-//   Interface used to implement a game object extension
+//   Interface used to implement legacy game object extensions, superseded by IEntityComponent
 struct IGameObjectExtension : public IEntityComponent
 {
-	IGameObjectExtension() : m_pGameObject(0) {}
+	CRY_DEPRECATED_GAMEOBJECT IGameObjectExtension() : m_pGameObject(0) {}
 
 	// IEntityComponent
-	virtual uint64 GetEventMask() const { return ~(BIT64(ENTITY_EVENT_PREPHYSICSUPDATE)|BIT64(ENTITY_EVENT_UPDATE)); } // All events except update and pre-physics update are subscribed to
-	virtual void Initialize() {};
+	//! GetEventMask implementation is now required for the legacy game object extensions, as a valid value is now needed for performance reasons.
+	//! Return the mask (e.g. ENTITY_EVENT_XFORM of all events you expect to process in ProcessEvent.
+	virtual Cry::Entity::EventFlags GetEventMask() const override = 0;
+	virtual void Initialize() override {};
+	virtual void NetReplicateSerialize(TSerialize ser) override
+	{
+		if (ser.IsReading())
+		{
+			SerializeSpawnInfo(ser);
+		}
+		else
+		{
+			if (ISerializableInfoPtr pSpawnInfo = GetSpawnInfo())
+			{
+				pSpawnInfo->SerializeWith(ser);
+			}
+		}
+	}
 	// ~IEntityComponent
 
 	// Summary
@@ -683,7 +703,7 @@ struct IGameObjectExtension : public IEntityComponent
 	// See Also
 	//   ISerialize
 	virtual void FullSerialize(TSerialize ser) = 0;
-	virtual bool NetSerialize(TSerialize ser, EEntityAspects aspect, uint8 profile, int pflags) = 0;
+	virtual bool NetSerialize(TSerialize ser, EEntityAspects aspect, uint8 profile, int pflags) override = 0;
 
 	// Summary
 	//   Return the aspects NetSerialize serializes.
@@ -721,7 +741,7 @@ struct IGameObjectExtension : public IEntityComponent
 	//   SGameObjectEvent
 	virtual void HandleEvent(const SGameObjectEvent& event) = 0;
 
-	virtual void GameSerialize(TSerialize ser ){ FullSerialize(ser); };                         //!< From IEntityComponent
+	virtual void GameSerialize(TSerialize ser ) override { FullSerialize(ser); };                         //!< From IEntityComponent
 
 	virtual void SetChannelId(uint16 id) = 0;
 

@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "ColorGradientCtrl.h"
@@ -256,9 +256,6 @@ void CColorGradientCtrl::OnPaint()
 //////////////////////////////////////////////////////////////////////////
 void CColorGradientCtrl::DrawGradient(CDC* pDC)
 {
-	int cx = m_rcGradient.Width();
-	int cy = m_rcGradient.Height();
-
 	//Draw Curve
 	// create and select a thick, white pen
 	CPen pen;

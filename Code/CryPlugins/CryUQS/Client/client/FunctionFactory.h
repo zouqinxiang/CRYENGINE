@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -17,11 +17,13 @@ namespace UQS
 			//
 			//===================================================================================
 
-			class CFunctionFactoryBase : public IFunctionFactory, public CFactoryBase<CFunctionFactoryBase>
+			class CFunctionFactoryBase : public IFunctionFactory, public Shared::CFactoryBase<CFunctionFactoryBase>
 			{
 			public:
 				// IFunctionFactory
 				virtual const char*                       GetName() const override final;
+				virtual const CryGUID&                    GetGUID() const override final;
+				virtual const char*                       GetDescription() const override final;
 				virtual const IInputParameterRegistry&    GetInputParameterRegistry() const override final;
 				// ~IFunctionFactory
 
@@ -34,19 +36,31 @@ namespace UQS
 				// ~IFunctionFactory
 
 			protected:
-				explicit                                  CFunctionFactoryBase(const char* szFunctionName);
+				explicit                                  CFunctionFactoryBase(const char* szFunctionName, const CryGUID& guid, const char* szDescription);
 
 			protected:
+				string                                    m_description;
 				CInputParameterRegistry                   m_inputParameterRegistry;
 			};
 
-			inline CFunctionFactoryBase::CFunctionFactoryBase(const char* szFunctionName)
-				: CFactoryBase(szFunctionName)
+			inline CFunctionFactoryBase::CFunctionFactoryBase(const char* szFunctionName, const CryGUID& guid, const char* szDescription)
+				: CFactoryBase(szFunctionName, guid)
+				, m_description(szDescription)
 			{}
 
 			inline const char* CFunctionFactoryBase::GetName() const
 			{
 				return CFactoryBase::GetName();
+			}
+
+			inline const CryGUID& CFunctionFactoryBase::GetGUID() const
+			{
+				return CFactoryBase::GetGUID();
+			}
+
+			inline const char* CFunctionFactoryBase::GetDescription() const
+			{
+				return m_description.c_str();
 			}
 
 			inline const IInputParameterRegistry& CFunctionFactoryBase::GetInputParameterRegistry() const
@@ -101,7 +115,17 @@ namespace UQS
 		class CFunctionFactory : public Internal::CFunctionFactoryBase
 		{
 		public:
-			explicit                            CFunctionFactory(const char* szFunctionName);
+
+			struct SCtorParams
+			{
+				const char*                     szName = "";
+				CryGUID                         guid = CryGUID::Null();
+				const char*                     szDescription = "";
+			};
+
+		public:
+
+			explicit                            CFunctionFactory(const SCtorParams& ctorParams);
 
 			// IFunctionFactory
 			virtual const Shared::CTypeInfo&    GetReturnType() const override final;
@@ -113,8 +137,8 @@ namespace UQS
 		};
 
 		template <class TFunction>
-		inline CFunctionFactory<TFunction>::CFunctionFactory(const char* szFunctionName)
-			: CFunctionFactoryBase(szFunctionName)
+		inline CFunctionFactory<TFunction>::CFunctionFactory(const SCtorParams& ctorParams)
+			: CFunctionFactoryBase(ctorParams.szName, ctorParams.guid, ctorParams.szDescription)
 		{
 			const bool bIsLeafFunction = TFunction::kLeafFunctionKind != ELeafFunctionKind::None;
 			Internal::SFunctionParamsExpositionHelper<TFunction, bIsLeafFunction>::Expose(m_inputParameterRegistry);

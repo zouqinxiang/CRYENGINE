@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -24,7 +24,7 @@ namespace UQS
 		class CBlueprintWithInputs
 		{
 		public:
-			bool                               InstantiateFunctionCallHierarchy(CFunctionCallHierarchy& out, const SQueryBlackboard& blackboard, Shared::CUqsString& error) const;
+			bool                               InstantiateFunctionCallHierarchy(CFunctionCallHierarchy& out, const SQueryContext& queryContext, Shared::CUqsString& error) const;
 
 		protected:
 			explicit                           CBlueprintWithInputs() {}

@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -60,12 +60,13 @@ public:
 		}
 	}
 
-	void         AddRef()  {}
-	void         Release() {}
+	// overrides ref count behavior as auto reg nodes are statically allocated.
+	virtual void AddRef() const override final {}
+	virtual void Release() const override final {}
 
-	void         Reset()   {}
+	virtual void Reset() override   {}
 
-	virtual void GetMemoryUsage(ICrySizer* s) const
+	virtual void GetMemoryUsage(ICrySizer* s) const override
 	{
 		SIZER_SUBCOMPONENT_NAME(s, "CAutoRegFlowNodeBase");
 	}
@@ -105,7 +106,7 @@ public:
 		}
 		else
 		{
-			CRY_ASSERT_MESSAGE(false, "Unsupported CloneType!");
+			CRY_ASSERT(false, "Unsupported CloneType!");
 		}
 	}
 
@@ -142,26 +143,21 @@ private:
 //////////////////////////////////////////////////////////////////////////
 class CFlowBaseNodeInternal : public IFlowNode
 {
+private:
 	template<ENodeCloneType CLONE_TYPE> friend class CFlowBaseNode;
-public:
 	// private ctor/dtor to prevent classes directly derived from this;
 	//	the exception is CFlowBaseNode (friended above)
-	CFlowBaseNodeInternal() { m_refs = 0; };
+	CFlowBaseNodeInternal() {};
 	virtual ~CFlowBaseNodeInternal() {}
 
+public:
 	//////////////////////////////////////////////////////////////////////////
 	// IFlowNode
-	virtual void         AddRef()                                                  { ++m_refs; };
-	virtual void         Release()                                                 { if (0 >= --m_refs) delete this; };
-
 	virtual IFlowNodePtr Clone(SActivationInfo* pActInfo)                          = 0;
 	virtual bool         SerializeXML(SActivationInfo*, const XmlNodeRef&, bool)   { return true; }
 	virtual void         Serialize(SActivationInfo*, TSerialize ser)               {}
 	virtual void         PostSerialize(SActivationInfo*)                           {}
 	virtual void         ProcessEvent(EFlowEvent event, SActivationInfo* pActInfo) {};
-
-private:
-	int m_refs;
 };
 
 //////////////////////////////////////////////////////////////////////////

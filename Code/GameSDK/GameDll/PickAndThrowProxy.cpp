@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 
@@ -113,7 +113,7 @@ void CPickAndThrowProxy::Physicalize()
 			pPrimGeom->Release();
 		} break;
 	default:
-		CRY_ASSERT_MESSAGE(false, "Invalid proxy shape?");
+		CRY_ASSERT(false, "Invalid proxy shape?");
 	}
 
 	if (pGeom)

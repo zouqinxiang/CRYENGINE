@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "Tornado.h"
@@ -58,7 +58,7 @@ bool CTornado::ReloadExtension( IGameObject * pGameObject, const SEntitySpawnPar
 {
 	ResetGameObject();
 
-	CRY_ASSERT_MESSAGE(false, "CTornado::ReloadExtension not implemented");
+	CRY_ASSERT(false, "CTornado::ReloadExtension not implemented");
 	
 	return false;
 }
@@ -66,7 +66,7 @@ bool CTornado::ReloadExtension( IGameObject * pGameObject, const SEntitySpawnPar
 //------------------------------------------------------------------------
 bool CTornado::GetEntityPoolSignature( TSerialize signature )
 {
-	CRY_ASSERT_MESSAGE(false, "CTornado::GetEntityPoolSignature not implemented");
+	CRY_ASSERT(false, "CTornado::GetEntityPoolSignature not implemented");
 	
 	return true;
 }
@@ -276,7 +276,7 @@ void CTornado::HandleEvent(const SGameObjectEvent &event)
 }
 
 //------------------------------------------------------------------------
-void CTornado::ProcessEvent(SEntityEvent &event)
+void CTornado::ProcessEvent(const SEntityEvent& event)
 {
 	switch (event.event)
 	{
@@ -284,6 +284,11 @@ void CTornado::ProcessEvent(SEntityEvent &event)
 		Reset();
 		break;
 	}
+}
+
+Cry::Entity::EventFlags CTornado::GetEventMask() const
+{
+	return ENTITY_EVENT_RESET;
 }
 
 //------------------------------------------------------------------------
@@ -388,7 +393,7 @@ void CTornado::UpdateTornadoSpline()
 	areaDef.pPoints = m_points;
 	areaDef.pGravityParams = &gravityParams;
 	gravityParams.gravity.Set(0,0,-9.81f);
-	gravityParams.falloff0 = -1.0f;	// ?: was NAN. CEntityPhysics::PhysicalizeArea sets to 'unused' if less than zero...
+	gravityParams.falloff0 = 0.8f; // passing -1.0f produces unnatural gap between weather.tornado.large and weather.tornado.top_part.
 	//gravityParams.gravity.Set(0,0,0);
 	
 	gravityParams.bUniform = 1;

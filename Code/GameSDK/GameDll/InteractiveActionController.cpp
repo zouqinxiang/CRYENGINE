@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
 -------------------------------------------------------------------------
@@ -246,7 +246,7 @@ void CInteractiveActionController::OnLeave( CPlayer& player )
 
 void CInteractiveActionController::Update( CPlayer& player, float frameTime,  const SActorFrameMovementParams& movement )
 {
-	CRY_ASSERT_MESSAGE(m_state != eState_None, "Non valid state!");
+	CRY_ASSERT(m_state != eState_None, "Non valid state!");
 
 	m_runningTime += frameTime;
 

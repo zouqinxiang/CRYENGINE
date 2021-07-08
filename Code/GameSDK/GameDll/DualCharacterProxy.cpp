@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
 -------------------------------------------------------------------------
@@ -72,7 +72,7 @@ void CAnimationProxyDualCharacterBase::Generate1P3PPairFile()
 					const char *name = animSet->GetNameByAnimID(anm);
 					if (strlen(name) >= 255)
 					{
-						CRY_ASSERT_MESSAGE(0, string().Format("[CAnimationProxyDualCharacterBase::Generate1P3PPairFiles] Animname %s overruns buffer", name));
+						CRY_ASSERT(0, string().Format("[CAnimationProxyDualCharacterBase::Generate1P3PPairFiles] Animname %s overruns buffer", name));
 						CryLogAlways("[CAnimationProxyDualCharacterBase::Generate1P3PPairFiles] Animname %s overruns buffer", name);
 						continue;
 					}

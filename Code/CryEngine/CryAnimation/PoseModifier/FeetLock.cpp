@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "stdafx.h"
 #include "FeetLock.h"
@@ -24,13 +24,18 @@ CRYREGISTER_CLASS(CFeetPoseStore)
 // IAnimationPoseModifier
 bool CFeetPoseStore::Execute(const SAnimationPoseModifierParams& params)
 {
+	DEFINE_PROFILER_FUNCTION();
+
 	Skeleton::CPoseData* pPoseData = Skeleton::CPoseData::GetPoseData(params.pPoseData);
 	if (!pPoseData)
 		return false;
 
 	const CDefaultSkeleton& rDefaultSkeleton = (const CDefaultSkeleton&)params.GetIDefaultSkeleton();
 	QuatT* pRelPose = pPoseData->GetJointsRelative();
+
+#ifdef _DEBUG
 	QuatT* pAbsPose = pPoseData->GetJointsAbsolute();
+#endif // _DEBUG
 
 	for (uint32 h = 0; h < MAX_FEET_AMOUNT; h++)
 	{
@@ -54,7 +59,7 @@ bool CFeetPoseStore::Execute(const SAnimationPoseModifierParams& params)
 			qWorldEndEffector.q.Normalize();
 		}
 		m_pFeetData[h].m_WorldEndEffector = qWorldEndEffector;
-		assert(m_pFeetData[h].m_WorldEndEffector.IsValid());
+		CRY_ASSERT(m_pFeetData[h].m_WorldEndEffector.IsValid());
 		m_pFeetData[h].m_IsEndEffector = 1;
 	}
 
@@ -62,10 +67,10 @@ bool CFeetPoseStore::Execute(const SAnimationPoseModifierParams& params)
 	uint32 numJoints = rDefaultSkeleton.GetJointCount();
 	for (uint32 j = 0; j < numJoints; j++)
 	{
-		assert(pRelPose[j].q.IsUnit());
-		assert(pAbsPose[j].q.IsUnit());
-		assert(pRelPose[j].IsValid());
-		assert(pAbsPose[j].IsValid());
+		CRY_ASSERT(pRelPose[j].q.IsUnit());
+		CRY_ASSERT(pAbsPose[j].q.IsUnit());
+		CRY_ASSERT(pRelPose[j].IsValid());
+		CRY_ASSERT(pAbsPose[j].IsValid());
 	}
 #endif
 
@@ -83,6 +88,8 @@ CRYREGISTER_CLASS(CFeetPoseRestore)
 // IAnimationPoseModifier
 bool CFeetPoseRestore::Execute(const SAnimationPoseModifierParams& params)
 {
+	DEFINE_PROFILER_FUNCTION();
+
 	Skeleton::CPoseData* pPoseData = Skeleton::CPoseData::GetPoseData(params.pPoseData);
 	if (!pPoseData)
 		return false;
@@ -100,7 +107,7 @@ bool CFeetPoseRestore::Execute(const SAnimationPoseModifierParams& params)
 		int32 idxDefinition = rDefaultSkeleton.GetLimbDefinitionIdx(nHandle);
 		if (idxDefinition < 0)
 			continue;
-		assert(m_pFeetData->m_WorldEndEffector.IsValid());
+		CRY_ASSERT(m_pFeetData->m_WorldEndEffector.IsValid());
 		const IKLimbType& rIKLimbType = rDefaultSkeleton.m_IKLimbTypes[idxDefinition];
 		uint32 numLinks = rIKLimbType.m_arrRootToEndEffector.size();
 		int32 lFootParentIdx = rIKLimbType.m_arrRootToEndEffector[numLinks - 2];
@@ -114,10 +121,10 @@ bool CFeetPoseRestore::Execute(const SAnimationPoseModifierParams& params)
 	uint32 numJoints = rDefaultSkeleton.GetJointCount();
 	for (uint32 j = 0; j < numJoints; j++)
 	{
-		assert(pRelPose[j].q.IsUnit());
-		assert(pAbsPose[j].q.IsUnit());
-		assert(pRelPose[j].IsValid());
-		assert(pAbsPose[j].IsValid());
+		CRY_ASSERT(pRelPose[j].q.IsUnit());
+		CRY_ASSERT(pAbsPose[j].q.IsUnit());
+		CRY_ASSERT(pRelPose[j].IsValid());
+		CRY_ASSERT(pAbsPose[j].IsValid());
 	}
 #endif
 
@@ -133,13 +140,13 @@ bool CFeetPoseRestore::Execute(const SAnimationPoseModifierParams& params)
 CFeetLock::CFeetLock()
 {
 	CryCreateClassInstance(CFeetPoseStore::GetCID(), m_store);
-	assert(m_store.get());
+	CRY_ASSERT(m_store.get());
 
 	CFeetPoseStore* pStore = static_cast<CFeetPoseStore*>(m_store.get());
 	pStore->m_pFeetData = &m_FeetData[0];
 
 	CryCreateClassInstance(CFeetPoseRestore::GetCID(), m_restore);
-	assert(m_restore.get());
+	CRY_ASSERT(m_restore.get());
 
 	CFeetPoseRestore* pRestore = static_cast<CFeetPoseRestore*>(m_restore.get());
 	pRestore->m_pFeetData = &m_FeetData[0];

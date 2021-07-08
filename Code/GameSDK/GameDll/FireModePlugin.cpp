@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
 -------------------------------------------------------------------------
@@ -15,6 +15,7 @@ Description: Fire Mode Plugins
 #include "Weapon.h"
 #include "VehicleWeapon.h"
 #include "Actor.h"
+#include "GameCVars.h"
 #include "Player.h"
 #include <CryParticleSystem/ParticleParams.h>
 #include "EntityUtility/EntityEffects.h"

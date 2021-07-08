@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 // -------------------------------------------------------------------------
 //  File name:   StreamAsyncFileRequest.h
@@ -16,6 +16,7 @@
 #include <CrySystem/IStreamEngineDefs.h>
 #include <CrySystem/TimeValue.h>
 #include <CryCore/Platform/CryWindows.h>
+#include <CryThreading/IJobManager.h>
 
 class CStreamEngine;
 class CAsyncIOFileRequest;
@@ -410,10 +411,7 @@ public:
 
 	CAsyncIOFileRequest_TransferPtr& operator=(CAsyncIOFileRequest* p)
 	{
-#ifndef _RELEASE
-		if (m_p)
-			__debugbreak();
-#endif
+		CRY_ASSERT(m_p == nullptr);
 		m_p = p;
 		return *this;
 	}

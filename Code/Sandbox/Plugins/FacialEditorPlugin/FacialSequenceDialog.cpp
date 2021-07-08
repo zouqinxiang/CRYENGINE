@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include <CryAnimation/ICryAnimation.h>
@@ -9,9 +9,8 @@
 #include <CrySandbox/ScopedVariableSetter.h>
 #include "Controls/TreeCtrlUtils.h"
 #include "Controls/QuestionDialog.h"
-#include "Dialogs/NumberDlg.h"
 #include <CryCore/Containers/VectorSet.h>
-#include "FilePathUtil.h"
+#include "PathUtils.h"
 #include "Util/MFCUtil.h"
 #include "IUndoManager.h"
 #include "Resource.h"
@@ -767,7 +766,6 @@ enum
 //////////////////////////////////////////////////////////////////////////
 void CFacialSequenceDialog::OnTreeRClick(NMHDR* pNMHDR, LRESULT* pResult)
 {
-	NMTREEVIEW* pNM = (NMTREEVIEW*)pNMHDR;
 	*pResult = TRUE;
 
 	if (!m_pContext)
@@ -1146,8 +1144,6 @@ void CFacialSequenceDialog::AddBalanceChannel()
 	if (m_pContext)
 		m_pContext->StoreSequenceUndo();
 
-	IFacialAnimSequence* pSequence = m_pContext->GetSequence();
-
 	IFacialAnimChannel* pChannel = m_pContext->GetSequence()->CreateChannel();
 	pChannel->SetName("Balance");
 	pChannel->SetFlags(IFacialAnimChannel::FLAG_BALANCE);
@@ -1172,8 +1168,6 @@ void CFacialSequenceDialog::AddCategoryBalanceChannel()
 	CUndo undo("Add Category Balance Channel");
 	if (m_pContext)
 		m_pContext->StoreSequenceUndo();
-
-	IFacialAnimSequence* pSequence = m_pContext->GetSequence();
 
 	IFacialAnimChannel* pChannel = m_pContext->GetSequence()->CreateChannel();
 	pChannel->SetEffector(m_pContext->pSelectedEffector);
@@ -1202,8 +1196,6 @@ void CFacialSequenceDialog::AddLipsyncCategoryStrengthChannel()
 	CUndo undo("Add Lipsync Category Strength Channel");
 	if (m_pContext)
 		m_pContext->StoreSequenceUndo();
-
-	IFacialAnimSequence* pSequence = m_pContext->GetSequence();
 
 	IFacialAnimChannel* pChannel = m_pContext->GetSequence()->CreateChannel();
 	pChannel->SetEffector(m_pContext->pSelectedEffector);
@@ -1256,7 +1248,7 @@ void CFacialSequenceDialog::CleanupKeys()
 		m_splineCtrl.StoreUndo();
 
 		for (SelectedTreeItemIterator it = BeginSelectedTreeItems(&m_channelsCtrl), end = EndSelectedTreeItems(&m_channelsCtrl); it != end; ++it)
-			std::for_each(BeginTreeItemDataRecursive<IFacialAnimChannel>(&m_channelsCtrl, *it), EndTreeItemDataRecursive<IFacialAnimChannel>(&m_channelsCtrl, *it), std::bind2nd(std::mem_fun(&IFacialAnimChannel::CleanupKeys), m_fKeyCleanupThreshold));
+			std::for_each(BeginTreeItemDataRecursive<IFacialAnimChannel>(&m_channelsCtrl, *it), EndTreeItemDataRecursive<IFacialAnimChannel>(&m_channelsCtrl, *it), std::bind(&IFacialAnimChannel::CleanupKeys, std::placeholders::_1, m_fKeyCleanupThreshold));
 
 		m_pContext->SendEvent(EFD_EVENT_SPLINE_CHANGE, 0);
 		m_pContext->bSequenceModfied = true;
@@ -1279,7 +1271,7 @@ void CFacialSequenceDialog::SmoothKeys()
 		m_splineCtrl.StoreUndo();
 
 		for (SelectedTreeItemIterator it = BeginSelectedTreeItems(&m_channelsCtrl), end = EndSelectedTreeItems(&m_channelsCtrl); it != end; ++it)
-			std::for_each(BeginTreeItemDataRecursive<IFacialAnimChannel>(&m_channelsCtrl, *it), EndTreeItemDataRecursive<IFacialAnimChannel>(&m_channelsCtrl, *it), std::bind2nd(std::mem_fun(&IFacialAnimChannel::SmoothKeys), m_fSmoothingSigma));
+			std::for_each(BeginTreeItemDataRecursive<IFacialAnimChannel>(&m_channelsCtrl, *it), EndTreeItemDataRecursive<IFacialAnimChannel>(&m_channelsCtrl, *it), std::bind(&IFacialAnimChannel::SmoothKeys, std::placeholders::_1, m_fSmoothingSigma));
 
 		m_pContext->SendEvent(EFD_EVENT_SPLINE_CHANGE, 0);
 		m_pContext->bSequenceModfied = true;
@@ -2130,7 +2122,6 @@ void CFacialSequenceDialog::OnSelectionChange()
 	enum {NUM_COLOURS = sizeof(colours) / sizeof(colours[0])};
 
 	// Update selection.
-	HTREEITEM hItem = m_channelsCtrl.GetFirstSelectedItem();
 	IFacialAnimChannel* pSelectedChannel = 0;
 	int colourIndex = 0;
 	m_pContext->ClearHighlightedChannels();
@@ -3052,7 +3043,6 @@ bool CFacialSequenceDialog::DoPhonemeExtraction(CString wavFile, CString strText
 		return false;
 
 	pSentence->SetText(phonemeText);
-	IPhonemeLibrary* pPhonemeLib = pSentence->GetPhonemeLib();
 
 	pSentence->ClearAllPhonemes();
 	for (int w = 0; w < (int)pOuSentenece->nWordCount; w++)

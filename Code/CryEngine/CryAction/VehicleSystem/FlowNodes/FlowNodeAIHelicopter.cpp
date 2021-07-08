@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include <CryFlowGraph/IFlowBaseNode.h>
@@ -9,16 +9,14 @@
 
 namespace
 {
-void AISendSignal(IEntity* const pEntity, const char* const signalName)
+void AISendSignal(IEntity* const pEntity, const AISignals::ISignalDescription& signalDescription)
 {
 	CRY_ASSERT(pEntity);
-	CRY_ASSERT(signalName);
 
 	IAIObject* const pAiObject = pEntity->GetAI();
 	if (pAiObject)
 	{
-		const uint32 signalNameCrc = CCrc32::Compute(signalName);
-		gEnv->pAISystem->SendSignal(SIGNALFILTER_SENDER, 1, signalName, pAiObject, NULL, signalNameCrc);
+		gEnv->pAISystem->SendSignal(AISignals::ESignalFilter::SIGNALFILTER_SENDER, gEnv->pAISystem->GetSignalManager()->CreateSignal(AISIGNAL_DEFAULT, signalDescription, pAiObject->GetEntityID()));
 	}
 }
 }
@@ -81,11 +79,11 @@ public:
 		case eFE_Activate:
 			if (IsPortActive(pActInfo, eInputPort_Enable))
 			{
-				AISendSignal(pEntity, "CombatTargetEnabled");
+				AISendSignal(pEntity, gEnv->pAISystem->GetSignalManager()->GetBuiltInSignalDescriptions().GetOnCombatTargetEnabled_DEPRECATED());
 			}
 			else if (IsPortActive(pActInfo, eInputPort_Disable))
 			{
-				AISendSignal(pEntity, "CombatTargetDisabled");
+				AISendSignal(pEntity, gEnv->pAISystem->GetSignalManager()->GetBuiltInSignalDescriptions().GetOnCombatTargetDisabled_DEPRECATED());
 			}
 			break;
 		}
@@ -150,11 +148,11 @@ public:
 		case eFE_Activate:
 			if (IsPortActive(pActInfo, eInputPort_Enable))
 			{
-				AISendSignal(pEntity, "FiringAllowed");
+				AISendSignal(pEntity, gEnv->pAISystem->GetSignalManager()->GetBuiltInSignalDescriptions().GetOnFiringAllowed_DEPRECATED());
 			}
 			else if (IsPortActive(pActInfo, eInputPort_Disable))
 			{
-				AISendSignal(pEntity, "FiringNotAllowed");
+				AISendSignal(pEntity, gEnv->pAISystem->GetSignalManager()->GetBuiltInSignalDescriptions().GetOnFiringNotAllowed_DEPRECATED());
 			}
 			break;
 		}
@@ -255,7 +253,7 @@ public:
 			else if (IsPortActive(pActInfo, eInputPort_Stop))
 			{
 				ActivateOutput(pActInfo, eOutputPort_Stopped, true);
-				AISendSignal(pEntity, "StopFollowPath");
+				AISendSignal(pEntity, gEnv->pAISystem->GetSignalManager()->GetBuiltInSignalDescriptions().GetOnStopFollowPath_DEPRECATED());
 				Reset(pActInfo);
 			}
 			else if (IsPortActive(pActInfo, eInputPort_Speed))
@@ -323,7 +321,7 @@ public:
 		}
 	}
 
-	virtual void OnEntityEvent(IEntity* pEntity, SEntityEvent& event)
+	virtual void OnEntityEvent(IEntity* pEntity, const SEntityEvent& event)
 	{
 		if (event.event != ENTITY_EVENT_SCRIPT_EVENT)
 		{
@@ -398,8 +396,7 @@ private:
 				const bool getValueSuccess = pScriptTable->GetValueAny("Helicopter_FlowNodeFollowPath", value);
 				if (getValueSuccess)
 				{
-					CFlowNode_Helicopter_FollowPath* pNode = const_cast<CFlowNode_Helicopter_FollowPath*>(reinterpret_cast<const CFlowNode_Helicopter_FollowPath*>(value.ptr));
-					return pNode;
+					return reinterpret_cast<CFlowNode_Helicopter_FollowPath*>(value.GetScriptHandle().ptr);
 				}
 			}
 		}
@@ -415,8 +412,7 @@ private:
 			if (pScriptTable)
 			{
 				ScriptAnyValue value;
-				value.type = ANY_THANDLE;
-				value.ptr = pNode;
+				value.SetScriptHandle(pNode);
 				pScriptTable->SetValueAny("Helicopter_FlowNodeFollowPath", value);
 			}
 		}
@@ -424,7 +420,7 @@ private:
 
 	void NotifyCurrentListenerFollowPathStopped(IEntity* pEntity)
 	{
-		assert(pEntity);
+		CRY_ASSERT(pEntity);
 		const EntityId entityId = pEntity->GetId();
 		CFlowNode_Helicopter_FollowPath* pNode = GetCurrentFollowPathNode(entityId);
 		if (pNode && pNode != this)
@@ -435,7 +431,7 @@ private:
 
 	void ProcessEventSpeedPortActivated(SActivationInfo* pActInfo)
 	{
-		assert(pActInfo != NULL);
+		CRY_ASSERT(pActInfo != NULL);
 
 		IEntity* pEntity = pActInfo->pEntity;
 		if (pEntity == NULL)
@@ -517,7 +513,7 @@ private:
 
 		pActInfo->pGraph->SetRegularlyUpdated(pActInfo->myID, true);
 
-		AISendSignal(pEntity, "StartFollowPath");
+		AISendSignal(pEntity, gEnv->pAISystem->GetSignalManager()->GetBuiltInSignalDescriptions().GetOnStartFollowPath_DEPRECATED());
 
 		m_restartOnPostSerialize = true;
 	}
@@ -613,11 +609,11 @@ public:
 				RegisterScriptEventlistener(pEntity->GetId());
 				pActInfo->pGraph->SetRegularlyUpdated(pActInfo->myID, true);
 
-				AISendSignal(pEntity, "StartForceFire");
+				AISendSignal(pEntity, gEnv->pAISystem->GetSignalManager()->GetBuiltInSignalDescriptions().GetOnStartForceFire_DEPRECATED());
 			}
 			else if (IsPortActive(pActInfo, eInputPort_Disable))
 			{
-				AISendSignal(pEntity, "StopForceFire");
+				AISendSignal(pEntity, gEnv->pAISystem->GetSignalManager()->GetBuiltInSignalDescriptions().GetOnStopForceFire_DEPRECATED());
 			}
 			break;
 
@@ -633,7 +629,7 @@ public:
 		}
 	}
 
-	virtual void OnEntityEvent(IEntity* pEntity, SEntityEvent& event)
+	virtual void OnEntityEvent(IEntity* pEntity, const SEntityEvent& event)
 	{
 		if (event.event != ENTITY_EVENT_SCRIPT_EVENT)
 		{

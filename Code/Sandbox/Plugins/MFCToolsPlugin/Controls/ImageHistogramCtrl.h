@@ -1,10 +1,11 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
+#include "MFCToolsDefines.h"
 #include "Util/GdiUtil.h"
 
-class PLUGIN_API CImageHistogramCtrl : public CWnd
+class MFC_TOOLS_PLUGIN_API CImageHistogramCtrl : public CWnd
 {
 	DECLARE_DYNAMIC(CImageHistogramCtrl)
 

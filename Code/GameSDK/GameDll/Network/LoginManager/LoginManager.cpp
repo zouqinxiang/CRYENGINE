@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "Network/LoginManager/LoginManager.h"
@@ -426,7 +426,7 @@ void CLoginManager::OnPasswordRequired()
 		Logout();
 	}
 #else
-	CRY_ASSERT_MESSAGE(0, "Blaze OnPasswordRequired should only be called on console!");
+	CRY_ASSERT(0, "Blaze OnPasswordRequired should only be called on console!");
 #endif
 }
 

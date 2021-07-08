@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -32,7 +32,7 @@ public:
 	virtual ~CSmartObjectClassDialog();
 
 	void    SetSOClass(const CString& sSOClass) { m_sSOClass = sSOClass; }
-	CString GetSOClass()                        { return m_sSOClass; };
+	CString GetSOClass()                        { return m_sSOClass; }
 	void    EnableOK()                          { m_bEnableOK = true; }
 
 	// Dialog Data

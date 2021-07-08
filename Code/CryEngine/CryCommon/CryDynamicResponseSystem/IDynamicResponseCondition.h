@@ -1,10 +1,10 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /************************************************************************
 
    An Interface for Conditions that can be added to Response Segments
 
-   /************************************************************************/
+************************************************************************/
 
 #ifndef _DYNAMICRESPONSECONDITION_H_
 #define _DYNAMICRESPONSECONDITION_H_
@@ -20,7 +20,7 @@ struct IVariableCollection;
 
 struct IResponseCondition : public IEditorObject
 {
-	virtual ~IResponseCondition() {}
+	virtual ~IResponseCondition() = default;
 
 	typedef uint32 ConditionIdentifierHash;
 	/**

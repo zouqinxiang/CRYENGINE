@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 
@@ -63,7 +63,7 @@ public:
 				if (isSet)
 				{
 					const string& val = GetPortString(pActInfo, VALUE);
-					pICVar->Set(val.c_str());
+					pICVar->SetFromString(val.c_str());
 				}
 				const string curVal = pICVar->GetString();
 				ActivateOutput(pActInfo, CURVALUE, curVal);

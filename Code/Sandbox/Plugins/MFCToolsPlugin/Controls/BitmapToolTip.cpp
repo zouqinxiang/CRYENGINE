@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "BitmapToolTip.h"
@@ -193,11 +193,10 @@ bool CBitmapToolTip::LoadImage(const CString& imageFilename)
 		return false;
 
 	EShowMode eShowMode = ESHOW_RGB;
-	const char* pShowModeDescription = "RGB";
 	bool bShowInOriginalSize = false;
 
 	GetShowMode(eShowMode, bShowInOriginalSize);
-	pShowModeDescription = GetShowModeDescription(eShowMode, bShowInOriginalSize);
+	const char* pShowModeDescription = GetShowModeDescription(eShowMode, bShowInOriginalSize);
 
 	if ((m_filename == imageFilename) && (m_eShowMode == eShowMode) && (m_bShowFullsize == bShowInOriginalSize))
 		return true;
@@ -513,8 +512,6 @@ void CBitmapToolTip::CorrectPosition()
 	CRect toolRc(m_toolRect);
 	pWnd->ClientToScreen(&toolRc);
 
-	bool bOffset = false;
-	int cy = GetSystemMetrics(SM_CYCURSOR);
 	int dy;
 	CRect go = rc;
 

@@ -1,11 +1,12 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
+#include "MFCToolsDefines.h"
 #include "FileUtil.h"
 #include <CryMemory/STLPoolAllocator.h>
 #include <CryThreading/IThreadManager.h>
 
-class PLUGIN_API CIndexedFiles
+class MFC_TOOLS_PLUGIN_API CIndexedFiles
 {
 	friend class CFileIndexingThread;
 public:
@@ -86,7 +87,7 @@ private:
 	typedef std::map<string, int_set, std::less<string>>                                                     TagTable;
 #else
 	typedef std::set<int, std::less<int>, stl::STLPoolAllocator<int>>                                          int_set;
-	typedef std::map<string, int_set, std::less<string>, stl::STLPoolAllocator<std::pair<string, int_set>>> TagTable;
+	typedef std::map<string, int_set, std::less<string>, stl::STLPoolAllocator<std::pair<const string, int_set>>> TagTable;
 #endif
 	TagTable m_tags;
 	string  m_rootPath;

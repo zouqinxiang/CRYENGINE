@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "stdafx.h"
 #include "PoseBlenderAim.h"
@@ -113,7 +113,6 @@ bool CPoseBlenderAim::PrepareInternal(const SAnimationPoseModifierParams& params
 	if (nDirIKLayer < 1 || nDirIKLayer >= numVIRTUALLAYERS)
 		return false;
 	f32 fDirIKLayerWeight = pSkeletonAnim->m_layers[nDirIKLayer].m_transitionQueue.m_fLayerTransitionWeight;
-	f32 t0 = 1.0f - fDirIKLayerWeight;
 	f32 t1 = fDirIKLayerWeight;
 	for (uint32 i = 0; i < MAX_EXEC_QUEUE * 2; i++)
 	{
@@ -138,10 +137,10 @@ bool CPoseBlenderAim::PrepareInternal(const SAnimationPoseModifierParams& params
 	for (uint32 i = 0; i < numActiveAnims; i++)
 	{
 		int32 nAnimID = rCurLayer[i].GetAnimationId();
-		assert(rCurLayer[i].IsActivated());
+		CRY_ASSERT(rCurLayer[i].IsActivated());
 		const ModelAnimationHeader* pAnim = pAnimationSet->GetModelAnimationHeader(nAnimID);
-		assert(pAnim);
-		assert(pAnim->m_nGlobalAnimId > -1);
+		CRY_ASSERT(pAnim);
+		CRY_ASSERT(pAnim->m_nGlobalAnimId > -1);
 		if (pAnim->m_nAssetType == AIM_File)
 		{
 			GlobalAnimationHeaderAIM& rGAH = g_AnimationManager.m_arrGlobalAIM[pAnim->m_nGlobalAnimId];
@@ -164,6 +163,8 @@ bool CPoseBlenderAim::PrepareInternal(const SAnimationPoseModifierParams& params
 
 bool CPoseBlenderAim::Execute(const SAnimationPoseModifierParams& params)
 {
+	DEFINE_PROFILER_FUNCTION();
+
 	Skeleton::CPoseData* pPoseData = Skeleton::CPoseData::GetPoseData(params.pPoseData);
 	if (!pPoseData)
 		return false;
@@ -214,7 +215,7 @@ bool CPoseBlenderAim::Execute(const SAnimationPoseModifierParams& params)
 				if (angle < 0.001f)
 					continue;
 
-				f32 blend = 1 - MIN(fabsf(angle), 1.0f);
+				f32 blend = 1 - std::min(fabsf(angle), 1.0f);
 
 				//	float fColDebug[4] = {1,1,0,1};
 				//	g_pAuxGeom->Draw2dLabel( 1,g_YLine, 1.3f, fColDebug, false,"angle: %f   blend: %f  fDistribution: %f wR: %f",angle,blend,fDistribution,wR );

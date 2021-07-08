@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "Stdafx.h"
 #include "GameStartup.h"
@@ -19,14 +19,14 @@ void EditorSmokeTestFixture::CreateSystem(SSystemInitParams& initParams)
     initParams.bEditor = true;
 
     HMODULE module = LoadSystemLibrary(initParams);
-    CRY_ASSERT_MESSAGE(module, "Unable to load CrySystem.dll");
+    CRY_ASSERT(module, "Unable to load CrySystem.dll");
 
     SetCurrentDirectory(m_pathHelper.GetCurrentDir());
     PFNCREATESYSTEMINTERFACE createSystemInterface = (PFNCREATESYSTEMINTERFACE) GetProcAddress(module, "CreateSystemInterface");
-    CRY_ASSERT_MESSAGE(createSystemInterface, "Unable to find CreateSystemInterface");
+    CRY_ASSERT(createSystemInterface, "Unable to find CreateSystemInterface");
 
     g_system = createSystemInterface(initParams);
-    CRY_ASSERT_MESSAGE(g_system, "Unable to create ISystem");
+    CRY_ASSERT(g_system, "Unable to create ISystem");
     ModuleInitISystem(g_system, "EditorSmokeTestFixture");
 }
 

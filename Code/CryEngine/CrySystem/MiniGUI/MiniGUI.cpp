@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 // -------------------------------------------------------------------------
 //  File name:   MiniGUI.cpp
@@ -10,6 +10,7 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #include <StdAfx.h>
+#include <CryMath/Cry_Math.h>
 #include "MiniGUI.h"
 #include "DrawContext.h"
 
@@ -57,16 +58,6 @@ public:
 	virtual EMiniCtrlType GetType() const                 { return eCtrlType_Unknown; };
 	virtual void          OnPaint(class CDrawContext& dc) {};
 };
-
-//////////////////////////////////////////////////////////////////////////
-CMiniGUI::CMiniGUI() :
-	m_enabled(false),
-	m_inFocus(true),
-	m_bListenersRegistered(false),
-	m_pDPadMenu(NULL),
-	m_pMovingCtrl(NULL)
-{
-}
 
 //////////////////////////////////////////////////////////////////////////
 void CMiniGUI::Init()
@@ -147,7 +138,7 @@ void CMiniGUI::Done()
 //////////////////////////////////////////////////////////////////////////
 void CMiniGUI::Draw()
 {
-	FUNCTION_PROFILER(GetISystem(), PROFILE_SYSTEM);
+	CRY_PROFILE_FUNCTION(PROFILE_SYSTEM);
 
 	// When console opened hide MiniGui
 	bool bConsoleOpened = gEnv->pConsole->IsOpened();
@@ -505,6 +496,8 @@ void CMiniGUI::UpdateDPadMenu(const SInputEvent& rInputEvent)
 					m_pDPadMenu = m_pDPadMenu->UpdateSelection(eCtrlEvent_LButtonDown);
 				}
 				break;
+			default:
+				break;
 			}
 		}
 	}
@@ -558,6 +551,8 @@ bool CMiniGUI::OnInputEvent(const SInputEvent& rInputEvent)
 						SetDPadMenu(pCtrl);
 					}
 
+					break;
+				default:
 					break;
 				}
 			}
@@ -832,6 +827,9 @@ void CMiniCtrl::OnEvent(float x, float y, EMiniCtrlEvent event)
 		break;
 
 	case eCtrlEvent_MouseOver:
+		break;
+
+	default:
 		break;
 	}
 }

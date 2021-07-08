@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "QueryBlueprintFileLibrary.h"
@@ -121,7 +121,7 @@ namespace UQS
 
 		void CQueryBlueprintFileLibrary::GetQueryRecordNameFromFilePath(const CryPathString& fileName, stack_string& outName) const
 		{
-			outName = fileName;
+			outName = fileName.c_str();
 			outName.replace(m_config.rootPath.c_str(), "");
 			PathUtil::RemoveExtension(outName);
 		}
@@ -134,8 +134,6 @@ namespace UQS
 		void CQueryBlueprintFileLibrary::SanitizeQueryName(stack_string& queryName) const
 		{
 			queryName.Trim();
-			// NOTE pavloi 2016.07.04: CryPak will make filenames lower-case by default (depends on Cvar), so better to enforce it
-			queryName.MakeLower();
 		}
 
 		bool CQueryBlueprintFileLibrary::ValidateQueryName(const stack_string& queryName, stack_string& error) const

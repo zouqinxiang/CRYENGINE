@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 //
 //	File: crynetwork.cpp
@@ -40,7 +40,7 @@ class CEngineModule_CryNetwork : public INetworkEngineModule
 		CRYINTERFACE_ADD(INetworkEngineModule)
 	CRYINTERFACE_END()
 
-	CRYGENERATE_SINGLETONCLASS(CEngineModule_CryNetwork, "EngineModule_CryNetwork", 0x7dc5c3b8bb374063, 0xa29ac2d6dd718e0f)
+	CRYGENERATE_SINGLETONCLASS_GUID(CEngineModule_CryNetwork, "EngineModule_CryNetwork", "7dc5c3b8-bb37-4063-a29a-c2d6dd718e0f"_cry_guid)
 
 	virtual ~CEngineModule_CryNetwork()
 	{
@@ -54,8 +54,6 @@ class CEngineModule_CryNetwork : public INetworkEngineModule
 	//////////////////////////////////////////////////////////////////////////
 	virtual bool Initialize(SSystemGlobalEnvironment& env, const SSystemInitParams& initParams) override
 	{
-		ISystem* pSystem = env.pSystem;
-
 		CNetwork* pNetwork = new CNetwork;
 
 		int ncpu = env.pi.numCoresAvailableToProcess;

@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "FacialEditorDialog.h"
@@ -33,7 +33,6 @@ FbxScene* LoadFBXFile(const char* filename)
 	{
 		// Unrecognizable file format. Try to fall back to FbxImporter::eFBX_BINARY
 		lFileFormat = lSdkManager->GetIOPluginRegistry()->FindReaderIDByDescription("FBX binary (*.fbx)");
-		;
 	}
 
 	// Initialize the importer.

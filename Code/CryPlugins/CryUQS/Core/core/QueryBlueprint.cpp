@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "QueryBlueprint.h"
@@ -17,19 +17,20 @@ namespace UQS
 		//===================================================================================
 
 		CTextualQueryBlueprint::CTextualQueryBlueprint()
-			: m_maxItemsToKeepInResultSet(0)
+			: m_queryFactoryGUID(CryGUID::Null())
+			, m_maxItemsToKeepInResultSet(1)	// default to 1 item in the result set (i.e. the most common use-case), instead of 0 (which would mean: "return me as many items as possible")
 		{
 			// nothing
 		}
 
 		CTextualQueryBlueprint::~CTextualQueryBlueprint()
 		{
-			for (CTextualInstantEvaluatorBlueprint* pIE : m_instantEvaluators)
+			for (CTextualEvaluatorBlueprint* pIE : m_instantEvaluators)
 			{
 				delete pIE;
 			}
 
-			for (CTextualDeferredEvaluatorBlueprint* pDE : m_deferredEvaluators)
+			for (CTextualEvaluatorBlueprint* pDE : m_deferredEvaluators)
 			{
 				delete pDE;
 			}
@@ -48,6 +49,11 @@ namespace UQS
 		void CTextualQueryBlueprint::SetQueryFactoryName(const char* szFactoryName)
 		{
 			m_queryFactoryName = szFactoryName;
+		}
+
+		void CTextualQueryBlueprint::SetQueryFactoryGUID(const CryGUID& factoryGUID)
+		{
+			m_queryFactoryGUID = factoryGUID;
 		}
 
 		void CTextualQueryBlueprint::SetMaxItemsToKeepInResultSet(size_t maxItems)
@@ -71,9 +77,9 @@ namespace UQS
 			return *m_pGenerator;
 		}
 
-		ITextualInstantEvaluatorBlueprint& CTextualQueryBlueprint::AddInstantEvaluator()
+		ITextualEvaluatorBlueprint& CTextualQueryBlueprint::AddInstantEvaluator()
 		{
-			CTextualInstantEvaluatorBlueprint* pNewInstantEvaluatorBP = new CTextualInstantEvaluatorBlueprint;
+			CTextualEvaluatorBlueprint* pNewInstantEvaluatorBP = new CTextualEvaluatorBlueprint;
 			m_instantEvaluators.push_back(pNewInstantEvaluatorBP);
 			return *pNewInstantEvaluatorBP;
 		}
@@ -83,9 +89,9 @@ namespace UQS
 			return m_instantEvaluators.size();
 		}
 
-		ITextualDeferredEvaluatorBlueprint& CTextualQueryBlueprint::AddDeferredEvaluator()
+		ITextualEvaluatorBlueprint& CTextualQueryBlueprint::AddDeferredEvaluator()
 		{
-			CTextualDeferredEvaluatorBlueprint* pNewDeferredEvaluatorBlueprint = new CTextualDeferredEvaluatorBlueprint;
+			CTextualEvaluatorBlueprint* pNewDeferredEvaluatorBlueprint = new CTextualEvaluatorBlueprint;
 			m_deferredEvaluators.push_back(pNewDeferredEvaluatorBlueprint);
 			return *pNewDeferredEvaluatorBlueprint;
 		}
@@ -112,6 +118,11 @@ namespace UQS
 			return m_queryFactoryName.c_str();
 		}
 
+		const CryGUID& CTextualQueryBlueprint::GetQueryFactoryGUID() const
+		{
+			return m_queryFactoryGUID;
+		}
+
 		size_t CTextualQueryBlueprint::GetMaxItemsToKeepInResultSet() const
 		{
 			return m_maxItemsToKeepInResultSet;
@@ -132,15 +143,15 @@ namespace UQS
 			return m_pGenerator.get();
 		}
 
-		const ITextualInstantEvaluatorBlueprint& CTextualQueryBlueprint::GetInstantEvaluator(size_t index) const
+		const ITextualEvaluatorBlueprint& CTextualQueryBlueprint::GetInstantEvaluator(size_t index) const
 		{
-			assert(index < m_instantEvaluators.size());
+			CRY_ASSERT(index < m_instantEvaluators.size());
 			return *m_instantEvaluators[index];
 		}
 
-		const ITextualDeferredEvaluatorBlueprint& CTextualQueryBlueprint::GetDeferredEvaluator(size_t index) const
+		const ITextualEvaluatorBlueprint& CTextualQueryBlueprint::GetDeferredEvaluator(size_t index) const
 		{
-			assert(index < m_deferredEvaluators.size());
+			CRY_ASSERT(index < m_deferredEvaluators.size());
 			return *m_deferredEvaluators[index];
 		}
 
@@ -151,7 +162,7 @@ namespace UQS
 
 		const ITextualQueryBlueprint& CTextualQueryBlueprint::GetChild(size_t index) const
 		{
-			assert(index < m_children.size());
+			CRY_ASSERT(index < m_children.size());
 			return *m_children[index];
 		}
 
@@ -207,35 +218,39 @@ namespace UQS
 			{
 				const char* szParamName = pair.first.c_str();
 				Client::IItemFactory* pItemFactory = pair.second;
-				assert(pItemFactory);
+				CRY_ASSERT(pItemFactory);
 				visitor.OnRuntimeParamVisited(szParamName, *pItemFactory);
 			}
 		}
 
 		const Shared::CTypeInfo& CQueryBlueprint::GetOutputType() const
 		{
-			assert(m_pQueryFactory);
+			CRY_ASSERT(m_pQueryFactory);
 			return m_pQueryFactory->GetQueryBlueprintType(*this);
 		}
 
 		bool CQueryBlueprint::Resolve(const ITextualQueryBlueprint& source)
 		{
-			bool bResolveSucceeded = true;
-
 			// name
 			m_name = source.GetName();
 
-			// query factory
+			// query factory: first search by its GUID, then by its name
 			{
-				const char* queryFactoryName = source.GetQueryFactoryName();
-				m_pQueryFactory = static_cast<CQueryFactoryBase*>(g_pHub->GetQueryFactoryDatabase().FindFactoryByName(queryFactoryName));  // the static_cast<> is kinda ok'ish here, since IQueryFactory and its derived class CQueryFactoryBase are _both_ defined in the core, so we definitely know about the inheritance hierarchy
-				if (!m_pQueryFactory)
+				const CryGUID& queryFactoryGUID = source.GetQueryFactoryGUID();
+				const char* szQueryFactoryName = source.GetQueryFactoryName();
+
+				if(!(m_pQueryFactory = static_cast<CQueryFactoryBase*>(g_pHub->GetQueryFactoryDatabase().FindFactoryByGUID(queryFactoryGUID))))         // the static_cast<> is kinda ok'ish here, since IQueryFactory and its derived class CQueryFactoryBase are _both_ defined in the core, so we definitely know about the inheritance hierarchy
 				{
-					if (DataSource::ISyntaxErrorCollector* pSE = source.GetSyntaxErrorCollector())
+					if (!(m_pQueryFactory = static_cast<CQueryFactoryBase*>(g_pHub->GetQueryFactoryDatabase().FindFactoryByName(szQueryFactoryName))))  // ditto
 					{
-						pSE->AddErrorMessage("Query factory with name '%s' not found", queryFactoryName);
+						if (DataSource::ISyntaxErrorCollector* pSE = source.GetSyntaxErrorCollector())
+						{
+							Shared::CUqsString guidAsString;
+							Shared::Internal::CGUIDHelper::ToString(queryFactoryGUID, guidAsString);
+							pSE->AddErrorMessage("Unknown QueryFactory: GUID = %s, name = '%s'", guidAsString.c_str(), szQueryFactoryName);
+						}
+						return false;
 					}
-					bResolveSucceeded = false;
 				}
 			}
 
@@ -264,7 +279,7 @@ namespace UQS
 							pSE->AddErrorMessage("Global runtime-parameter clashes with constant-parameter of the same name: '%s'", p2.szName);
 						}
 
-						bResolveSucceeded = false;
+						return false;
 					}
 				}
 			}
@@ -272,13 +287,13 @@ namespace UQS
 			// global constant-params
 			if (!m_globalConstantParams.Resolve(source.GetGlobalConstantParams()))
 			{
-				bResolveSucceeded = false;
+				return false;
 			}
 
 			// global runtime-params
 			if (!m_globalRuntimeParams.Resolve(source.GetGlobalRuntimeParams(), m_pParent))
 			{
-				bResolveSucceeded = false;
+				return false;
 			}
 
 			// generator (a generator is optional and typically never exists in composite queries)
@@ -288,7 +303,7 @@ namespace UQS
 				if (!m_pGenerator->Resolve(*pGeneratorBlueprint, *this))
 				{
 					m_pGenerator.reset();    // nullify the generator so that CInputBlueprint::Resolve() won't be tempted to use this half-baked object for further checks (and crash becuase it might be lacking a generator-factory)
-					bResolveSucceeded = false;
+					return false;
 				}
 			}
 
@@ -299,7 +314,7 @@ namespace UQS
 				m_instantEvaluators.push_back(pNewInstantEvaluatorBP);
 				if (!pNewInstantEvaluatorBP->Resolve(source.GetInstantEvaluator(i), *this))
 				{
-					bResolveSucceeded = false;
+					return false;
 				}
 			}
 
@@ -310,7 +325,7 @@ namespace UQS
 				m_deferredEvaluators.push_back(pNewDeferredEvaluatorBP);
 				if (!pNewDeferredEvaluatorBP->Resolve(source.GetDeferredEvaluator(i), *this))
 				{
-					bResolveSucceeded = false;
+					return false;
 				}
 			}
 
@@ -327,7 +342,7 @@ namespace UQS
 					{
 						pSE->AddErrorMessage("Exceeded the maximum number of instant-evaluators in the query blueprint (max %i supported, %i present in the blueprint)", UQS_MAX_EVALUATORS, (int)numInstantEvaluators);
 					}
-					bResolveSucceeded = false;
+					return false;
 				}
 			}
 
@@ -339,7 +354,7 @@ namespace UQS
 					{
 						pSE->AddErrorMessage("Exceeded the maximum number of deferred-evaluators in the query blueprint (max %i supported, %i present in the blueprint)", UQS_MAX_EVALUATORS, (int)numDeferredEvaluators);
 					}
-					bResolveSucceeded = false;
+					return false;
 				}
 			}
 
@@ -351,7 +366,7 @@ namespace UQS
 				pChildTarget->m_pParent = this;
 				m_children.push_back(pChildTarget);
 				if (!pChildTarget->Resolve(childSource))
-					bResolveSucceeded = false;
+					return false;
 			}
 
 			// if the query-factory expects to have a generator in the blueprint, then ensure that one was provided (and the other way around)
@@ -363,7 +378,7 @@ namespace UQS
 					{
 						pSE->AddErrorMessage("Query factories of type '%s' require a generator, but none is provided", m_pQueryFactory->GetName());
 					}
-					bResolveSucceeded = false;
+					return false;
 				}
 				else if (!m_pQueryFactory->RequiresGenerator() && m_pGenerator)
 				{
@@ -371,7 +386,7 @@ namespace UQS
 					{
 						pSE->AddErrorMessage("Query factories of type '%s' don't require a generator, but one was provided", m_pQueryFactory->GetName());
 					}
-					bResolveSucceeded = false;
+					return false;
 				}
 			}
 
@@ -389,7 +404,7 @@ namespace UQS
 						{
 							pSE->AddErrorMessage("Too few child queries: %i (expected at least %i)", (int)actualNumChildQueries, (int)minRequiredChildQueries);
 						}
-						bResolveSucceeded = false;
+						return false;
 					}
 				}
 
@@ -402,14 +417,12 @@ namespace UQS
 						{
 							pSE->AddErrorMessage("Too many child queries: %i (expected no more than %i)", (int)actualNumChildQueries, (int)maxAllowedChildQueries);
 						}
-						bResolveSucceeded = false;
+						return false;
 					}
 				}
 			}
 
 			// have the query-factory check that if it deals with child-queries that their output types are compatible among each other
-			// note: we do this only if the blueprint could be resolved successfully so far (it's too cumbersome to deal with potential null-pointers in all related code)
-			if (bResolveSucceeded)
 			{
 				string error;
 				size_t indexOfChildCausingTheError = 0;
@@ -422,18 +435,24 @@ namespace UQS
 					{
 						pSE->AddErrorMessage("%s", error.c_str());
 					}
-					bResolveSucceeded = false;
+					return false;
 				}
 			}
 
+			// patch the name such that it also contains an extra suffix indicating its location in the hierarchical query (e. g. "spider_hide_spot::[childQuery_#0]::[childQuery_#2]")
+			// (this is done *before* sorting instant-evaluators, so that when the query blueprint's GetName() is used for debug logging, it will reflect its *original* location in the hierarchy as authored in the query editor)
+			stack_string nameSuffix;
+			for (const CQueryBlueprint* pParent = m_pParent, *pChild = this; pParent; pChild = pParent, pParent = pParent->m_pParent)
+			{
+				nameSuffix = stack_string().Format("::[childQuery_#%i]", pParent->GetChildIndex(pChild)) + nameSuffix;
+			}
+			m_name += nameSuffix.c_str();
+
 			// sort the instant-evaluator blueprints by cost and evaluation modality such that their order at execution time won't change
 			// (this also helps the user to read the query history as it will show all evaluators in order of how they were executed)
-			if (bResolveSucceeded)
-			{
-				SortInstantEvaluatorBlueprintsByCostAndEvaluationModality();
-			}
+			SortInstantEvaluatorBlueprintsByCostAndEvaluationModality();
 
-			return bResolveSucceeded;
+			return true;
 		}
 
 		const CQueryBlueprint* CQueryBlueprint::GetParent() const
@@ -448,7 +467,7 @@ namespace UQS
 
 		std::shared_ptr<const CQueryBlueprint> CQueryBlueprint::GetChild(size_t index) const
 		{
-			assert(index < m_children.size());
+			CRY_ASSERT(index < m_children.size());
 			return m_children[index];
 		}
 
@@ -464,7 +483,7 @@ namespace UQS
 
 		QueryBaseUniquePtr CQueryBlueprint::CreateQuery(const CQueryBase::SCtorContext& ctorContext) const
 		{
-			assert(m_pQueryFactory);
+			CRY_ASSERT(m_pQueryFactory);
 			return m_pQueryFactory->CreateQuery(ctorContext);
 		}
 
@@ -498,7 +517,7 @@ namespace UQS
 			return m_deferredEvaluators;
 		}
 
-		bool CQueryBlueprint::CheckPresenceAndTypeOfGlobalRuntimeParamsRecursively(const Shared::IVariantDict& runtimeParamsToValidate, Shared::CUqsString& error) const
+		bool CQueryBlueprint::CheckPresenceAndTypeOfGlobalRuntimeParamsRecursively(const Shared::IVariantDict& runtimeParamsToValidate, Shared::IUqsString& error) const
 		{
 			//
 			// ensure that all required runtime-params have been passed in and that their data types match those in this query-blueprint
@@ -518,7 +537,7 @@ namespace UQS
 				}
 
 				const Client::IItemFactory* pExpectedItemFactory = pair.second.pItemFactory;
-				assert(pExpectedItemFactory);
+				CRY_ASSERT(pExpectedItemFactory);
 
 				if (pFoundItemFactory != pExpectedItemFactory)
 				{
@@ -541,13 +560,13 @@ namespace UQS
 
 		const Shared::CTypeInfo* CQueryBlueprint::GetTypeOfShuttledItemsToExpect() const
 		{
-			assert(m_pQueryFactory);
+			CRY_ASSERT(m_pQueryFactory);
 			return m_pQueryFactory->GetTypeOfShuttledItemsToExpect(*this);
 		}
 
 		const CQueryFactoryBase& CQueryBlueprint::GetQueryFactory() const
 		{
-			assert(m_pQueryFactory);
+			CRY_ASSERT(m_pQueryFactory);
 			return *m_pQueryFactory;
 		}
 
@@ -565,7 +584,7 @@ namespace UQS
 			// factory
 			//
 
-			assert(m_pQueryFactory);
+			CRY_ASSERT(m_pQueryFactory);
 			logger.Printf("Query factory = %s", m_pQueryFactory->GetName());
 
 			//
@@ -701,7 +720,7 @@ namespace UQS
 						break;
 
 					default:
-						assert(0);
+						CRY_ASSERT(0);
 					}
 					break;
 
@@ -717,12 +736,12 @@ namespace UQS
 						break;
 
 					default:
-						assert(0);
+						CRY_ASSERT(0);
 					}
 					break;
 
 				default:
-					assert(0);
+					CRY_ASSERT(0);
 				}
 			}
 
@@ -742,7 +761,7 @@ namespace UQS
 			{
 				const char* szParamName = pair.first.c_str();
 				Client::IItemFactory* pItemFactory = pair.second.pItemFactory;
-				assert(pItemFactory);
+				CRY_ASSERT(pItemFactory);
 				out[szParamName] = pItemFactory;	// potentially overwrite the param from a parent; we presume here that both have the same item type (this is ensured by CGlobalRuntimeParamsBlueprint::Resolve())
 			}
 

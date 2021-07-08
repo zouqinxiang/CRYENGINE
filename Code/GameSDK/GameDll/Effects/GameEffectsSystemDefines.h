@@ -1,9 +1,11 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #ifndef _GAME_EFFECTS_SYSTEM_DEFINES_
 #define _GAME_EFFECTS_SYSTEM_DEFINES_
 
 #pragma once
+
+#include <CryCore/smartptr.h>
 
 // Defines
 #define	GAME_FX_SYSTEM					CGameEffectsSystem::Instance()
@@ -38,7 +40,7 @@
 
 // FX Asserts
 #if DEBUG_GAME_FX_SYSTEM
-	#define FX_ASSERT_MESSAGE(condition,message)		CRY_ASSERT_MESSAGE(condition,message); \
+	#define FX_ASSERT_MESSAGE(condition,message)		CRY_ASSERT(condition,message); \
 																									if(!(condition)) \
 																									{\
 																										CryLogAlways("\n*************************************************************************************"); \
@@ -107,6 +109,7 @@
 struct IGameEffect;
 struct IGameRenderNode;
 struct IGameRenderElement;
+struct IItemParamsNode;
 
 // Typedefs
 typedef void (*DataLoadCallback)(IItemParamsNode *paramNode);

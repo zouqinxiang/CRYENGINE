@@ -1,11 +1,6 @@
-#if !defined(AFX_COLORCTRL_H__CA4DE73C_CDC9_11D3_B261_00104BB13A66__INCLUDED_)
-#define AFX_COLORCTRL_H__CA4DE73C_CDC9_11D3_B261_00104BB13A66__INCLUDED_
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
-#if _MSC_VER >= 1000
-	#pragma once
-#endif // _MSC_VER >= 1000
-
-#include "Controls/TemplDef.h" // message map extensions for templates
+#pragma once
 
 ///////////////////////////////////////////////////////////////////////////////
 // class CColorCtrl
@@ -112,8 +107,7 @@ public:
 		return clr & ~CLR_DEFAULT;               // normal color
 	}
 
-	//protected:
-	UINT     m_nTimerID;
+	UINT_PTR m_nTimerID;
 	int      m_iBlinkPhase;
 	UINT     m_nDelay;
 	BOOL     m_fBlinkText;
@@ -148,7 +142,7 @@ protected:
 	afx_msg int    OnCreate(LPCREATESTRUCT lpCreateStruct);
 	//}}AFX_MSG
 
-	DECLARE_TEMPLATE_MESSAGE_MAP()
+	DECLARE_MESSAGE_MAP()
 };
 
 /////////////////////////////////////////////////////////////////////////////
@@ -186,7 +180,7 @@ CColorCtrl<BASE_TYPE>::CColorCtrl()
 	m_rgbBlinkBk[1] = m_rgbBk;
 }
 
-BEGIN_TEMPLATE_MESSAGE_MAP_CUSTOM(class BASE_TYPE, CColorCtrl<BASE_TYPE>, BASE_TYPE)
+BEGIN_TEMPLATE_MESSAGE_MAP(CColorCtrl, BASE_TYPE, BASE_TYPE)
 //{{AFX_MSG_MAP(CColorCtrl)
 ON_WM_CTLCOLOR_REFLECT()
 ON_WM_CTLCOLOR()
@@ -194,7 +188,7 @@ ON_WM_DESTROY()
 ON_WM_TIMER()
 ON_WM_CREATE()
 //}}AFX_MSG_MAP
-END_TEMPLATE_MESSAGE_MAP_CUSTOM()
+END_MESSAGE_MAP()
 
 template<class BASE_TYPE>
 void CColorCtrl<BASE_TYPE >::SetTextColor(COLORREF rgbText)
@@ -505,7 +499,7 @@ public:
 class CDynamicToolTipCtrl : public CToolTipCtrl
 {
 public:
-	~CDynamicToolTipCtrl() {};
+	~CDynamicToolTipCtrl() {}
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -556,16 +550,16 @@ protected:
 	afx_msg void OnLButtonDown(UINT nFlags, CPoint point);
 	//}}AFX_MSG
 
-	DECLARE_TEMPLATE_MESSAGE_MAP()
+	DECLARE_MESSAGE_MAP()
 };
 
 // cppcheck-suppress syntaxError
-BEGIN_TEMPLATE_MESSAGE_MAP_CUSTOM(class BASE_TYPE, CColorPushButton<BASE_TYPE>, BASE_TYPE)
+BEGIN_TEMPLATE_MESSAGE_MAP(CColorPushButton, BASE_TYPE, BASE_TYPE)
 //{{AFX_MSG_MAP(CColorPushButton)
 ON_WM_CREATE()
 ON_WM_LBUTTONDOWN()
 //}}AFX_MSG_MAP
-END_TEMPLATE_MESSAGE_MAP_CUSTOM()
+END_MESSAGE_MAP()
 
 template<class BASE_TYPE>
 CColorPushButton<BASE_TYPE>::CColorPushButton()
@@ -862,8 +856,3 @@ void CColorPushButton<BASE_TYPE >::DrawItem(LPDRAWITEMSTRUCT lpDrawItemStruct)
 	if ((state & ODS_FOCUS) && !m_fNoFocus)
 		pDC->DrawFocusRect(rcFocus);
 }
-
-//{{AFX_INSERT_LOCATION}}
-// Microsoft Developer Studio will insert additional declarations immediately before the previous line.
-
-#endif // !defined(AFX_COLORCTRL_H__CA4DE73C_CDC9_11D3_B261_00104BB13A66__INCLUDED_)

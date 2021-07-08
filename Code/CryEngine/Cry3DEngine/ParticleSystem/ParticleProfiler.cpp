@@ -1,14 +1,14 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
-#include <CryEntitySystem/IEntity.h>
-#include <CryEntitySystem/IEntitySystem.h>
 #include "ParticleProfiler.h"
 #include "ParticleComponentRuntime.h"
 #include "ParticleEmitter.h"
 #include "ParticleSystem.h"
 
-CRY_PFX2_DBG
+#include <CryEntitySystem/IEntity.h>
+#include <CryEntitySystem/IEntitySystem.h>
+#include <CryRenderer/IRenderAuxGeom.h>
 
 namespace pfx2
 {
@@ -59,27 +59,36 @@ public:
 
 	void WriteHeader()
 	{
-		Column("Entity");
 		Column("Effect");
 		Column("Component");
+		Column("Entity");
 		for (const auto& stat : statisticsOutput)
 			Column(stat.m_statName);
 		NewLine();
 	}
 
-	void WriteStatistics(CParticleComponentRuntime* pRuntime, const SStatistics& statistics)
+	void WriteStatistics(const CParticleComponentRuntime& runtime, const SStatistics& statistics)
 	{
-		CParticleComponent* pComponent = pRuntime->GetComponent();
-		CParticleEmitter* pEmitter = pRuntime->GetEmitter();
+		CParticleComponent* pComponent = runtime.GetComponent();
+		CParticleEmitter* pEmitter = runtime.GetEmitter();
 		CParticleEffect* pEffect = pEmitter->GetCEffect();
-		IEntity* pEntity = gEnv->pEntitySystem->GetEntity(pEmitter->GetEntityId());
-		cstr effectName = pEffect->GetFullName();
+		IEntity* pEntity = pEmitter->GetOwnerEntity();
+		cstr effectName = pEffect->GetName();
 		cstr componentName = pComponent->GetName();
 		cstr entityName = pEntity ? pEntity->GetName() : gDefaultEntityName;
 
-		Column(entityName);
-		Column(effectName);
-		Column(componentName);
+		Column(string().Format("%s%s%s",
+			pEmitter->IsActive() ? "#Active " : "#Inactive ",
+			pEmitter->IsAlive() ? "#E:Alive " : "#E:Dead ",
+			effectName));
+		Column(string().Format("%s%s%s%s", 
+			pComponent->GetParentComponent() ? "#Child " : "",
+			pComponent->ComponentParams().m_isImmortal ? "#Immortal " : "",
+			runtime.IsAlive() ? "#C:Alive " : "#C:Dead ",
+			componentName));
+		Column(string().Format("%s%s", entityName, 
+			pEmitter->IsIndependent() ? " #Independent" : ""
+		));
 		for (const auto& stat : statisticsOutput)
 			Column(string().Format("%d", statistics.m_values[stat.m_stat]));
 		NewLine();
@@ -106,7 +115,7 @@ public:
 		m_pRender = gEnv->pRenderer;
 		m_pRenderAux = m_pRender->GetIRenderAuxGeom();
 		m_prevFlags = m_pRenderAux->GetRenderFlags();
-		m_screenSize = Vec2(float(m_pRender->GetWidth()), float(m_pRender->GetHeight()));
+		m_screenSize = Vec2(float(m_pRenderAux->GetCamera().GetViewSurfaceX()), float(m_pRenderAux->GetCamera().GetViewSurfaceZ()));
 		SAuxGeomRenderFlags curFlags = m_prevFlags;
 		curFlags.SetMode2D3DFlag(e_Mode2D);
 		curFlags.SetDepthTestFlag(e_DepthTestOff);
@@ -200,21 +209,22 @@ void CParticleProfiler::Display()
 {
 	CRY_PROFILE_FUNCTION(PROFILE_PARTICLE);
 
-	CVars* pCVars = static_cast<C3DEngine*>(gEnv->p3DEngine)->GetCVars();
 	const int anyProfilerFlags = 3 | AlphaBits('f');
-	if (pCVars->e_ParticlesProfiler & anyProfilerFlags)
+	if (GetCVars()->e_ParticlesProfiler & anyProfilerFlags)
 	{
 		SortEntries();
 
 		if (!m_entries[0].empty())
 		{
 #ifndef _RELEASE
-			if (pCVars->e_ParticlesProfiler & AlphaBit('f'))
+			if (GetCVars()->e_ParticlesProfiler & AlphaBit('f'))
+			{
 				SaveToFile();
+			}
 #endif
-			if (pCVars->e_ParticlesProfiler & 1)
+			if (GetCVars()->e_ParticlesProfiler & 1)
 				DrawPerfomanceStats();
-			else if (pCVars->e_ParticlesProfiler & 2)
+			else if (GetCVars()->e_ParticlesProfiler & 2)
 				DrawMemoryStats();
 		}
 	}
@@ -224,10 +234,9 @@ void CParticleProfiler::Display()
 
 void CParticleProfiler::SaveToFile()
 {
-	CVars* pCVars = static_cast<C3DEngine*>(gEnv->p3DEngine)->GetCVars();
 	string genName;
-	string folderName = pCVars->e_ParticlesProfilerOutputFolder->GetString();
-	string fileName = pCVars->e_ParticlesProfilerOutputName->GetString();
+	string folderName = GetCVars()->e_ParticlesProfilerOutputFolder->GetString();
+	string fileName = GetCVars()->e_ParticlesProfilerOutputName->GetString();
 	if (folderName.empty() || fileName.empty())
 		return;
 	if (folderName[folderName.size() - 1] != '\\' || folderName[folderName.size() - 1] != '/')
@@ -270,28 +279,26 @@ void CParticleProfiler::WriteEntries(CCSVFileOutput& output) const
 
 	output.WriteHeader();
 
-	const CParticleEmitter* pEmitter = nullptr;
 	SStatistics runtimeStats;
-	CParticleComponentRuntime* pCurrentRuntime = finalElements.front().m_pRuntime;
+	const CParticleComponentRuntime* pCurrentRuntime = finalElements.front().m_pRuntime;
 
 	for (const SEntry& entry : finalElements)
 	{
 		if (entry.m_pRuntime != pCurrentRuntime)
 		{
-			output.WriteStatistics(entry.m_pRuntime, runtimeStats);
+			output.WriteStatistics(*entry.m_pRuntime, runtimeStats);
 			runtimeStats = SStatistics();
 			pCurrentRuntime = entry.m_pRuntime;
 		}
 		runtimeStats.m_values[entry.m_type] += entry.m_value;
 	}
-	output.WriteStatistics(pCurrentRuntime, runtimeStats);
+	output.WriteStatistics(*pCurrentRuntime, runtimeStats);
 }
 
 void CParticleProfiler::DrawPerfomanceStats()
 {
-	CVars* pCVars = static_cast<C3DEngine*>(gEnv->p3DEngine)->GetCVars();
-	const uint countsBudget = pCVars->e_ParticlesProfilerCountBudget;
-	const uint timingBudget = pCVars->e_ParticlesProfilerTimingBudget;
+	const uint countsBudget = GetCVars()->e_ParticlesProfilerCountBudget;
+	const uint timingBudget = GetCVars()->e_ParticlesProfilerTimingBudget;
 
 	const SStatDisplay statisticsDisplay[] =
 	{
@@ -359,7 +366,7 @@ void CParticleProfiler::DrawStats(CStatisticsDisplay& output, Vec2 pos, EProfile
 		SStatEntry()
 			: pRuntime(nullptr)
 			, value(0) {}
-		CParticleComponentRuntime* pRuntime;
+		const CParticleComponentRuntime* pRuntime;
 		uint value;
 	};
 
@@ -407,10 +414,10 @@ void CParticleProfiler::DrawStats(CStatisticsDisplay& output, Vec2 pos, EProfile
 	uint statCount = min(uint(statEntries.size()), gDisplayMaxNumComponents);
 	for (uint i = 0; i < statCount; ++i)
 	{
-		CParticleComponentRuntime* pRuntime = statEntries[i].pRuntime;
-		CParticleComponent* pComponent = pRuntime->GetComponent();
-		CParticleEmitter* pEmitter = pRuntime->GetEmitter();
-		IEntity* pEntity = gEnv->pEntitySystem->GetEntity(pEmitter->GetEntityId());
+		const CParticleComponentRuntime* pRuntime = statEntries[i].pRuntime;
+		const CParticleComponent* pComponent = pRuntime->GetComponent();
+		const CParticleEmitter* pEmitter = pRuntime->GetEmitter();
+		IEntity* pEntity = pEmitter->GetOwnerEntity();
 
 		const ColorF color = pEmitter->GetProfilerColor();
 		const uint value = statEntries[i].value;
@@ -419,7 +426,7 @@ void CParticleProfiler::DrawStats(CStatisticsDisplay& output, Vec2 pos, EProfile
 
 		const cstr format = "\"%s\" : %s : %s (%d)";
 		const cstr componentName = pComponent->GetName();
-		const cstr effectName = pComponent->GetEffect()->GetFullName();
+		const cstr effectName = pComponent->GetEffect()->GetName();
 		const cstr entityName = pEntity ? pEntity->GetName() : gDefaultEntityName;
 		output.DrawText(textPos, color, format, entityName, effectName, componentName, value);
 		textPos.y += gDisplayLineGap;
@@ -440,7 +447,10 @@ void CParticleProfiler::DrawMemoryStats()
 	IRenderAuxGeom* pRenderAux = gEnv->pRenderer->GetIRenderAuxGeom();
 	CStatisticsDisplay output;
 
-	const Vec2 pixSz = Vec2(1.0f / gEnv->pRenderer->GetWidth(), 1.0f / gEnv->pRenderer->GetHeight());
+	const float screenWidth  = float(pRenderAux->GetCamera().GetViewSurfaceX());
+	const float screenHeight = float(pRenderAux->GetCamera().GetViewSurfaceZ());
+
+	const Vec2 pixSz = Vec2(1.0f / screenWidth, 1.0f / screenHeight);
 	const Vec2 offset = Vec2(0.25, 0.025f);
 	const float widthPerByte = 1.0f / float(1 << 15);
 	const float height = 1.0f / 64.0f;
@@ -449,12 +459,9 @@ void CParticleProfiler::DrawMemoryStats()
 	uint usedBytes = 0;
 	for (CParticleEmitter* pEmitter : GetPSystem()->GetActiveEmitters())
 	{
-		CParticleEffect* pEffect = pEmitter->GetCEffect();
-		TComponentId lastComponentIt = pEffect->GetNumComponents();
-		for (TComponentId componentId = 0; componentId < lastComponentIt; ++componentId)
+		for (auto pRuntime : pEmitter->GetRuntimes())
 		{
-			const CParticleComponentRuntime* pRuntime = pEmitter->GetRuntimes()[componentId].pRuntime->GetCpuRuntime();
-			if (!pRuntime)
+			if (!pRuntime->IsCPURuntime())
 				continue;
 			const CParticleContainer& container = pRuntime->GetContainer();
 			const uint totalNumParticles = container.GetMaxParticles();
@@ -463,7 +470,7 @@ void CParticleProfiler::DrawMemoryStats()
 			{
 				if (!container.HasData(type))
 					continue;
-				const size_t stride = type.info().typeSize();
+				const size_t stride = type.info().typeSize;
 				totalBytes += totalNumParticles * stride;
 				usedBytes += usedNumParticles * stride;
 			}
@@ -479,11 +486,9 @@ void CParticleProfiler::DrawMemoryStats()
 	for (CParticleEmitter* pEmitter : GetPSystem()->GetActiveEmitters())
 	{
 		CParticleEffect* pEffect = pEmitter->GetCEffect();
-		TComponentId lastComponentIt = pEffect->GetNumComponents();
-		for (TComponentId componentId = 0; componentId < lastComponentIt; ++componentId)
+		for (auto pRuntime : pEmitter->GetRuntimes())
 		{
-			const CParticleComponentRuntime* pRuntime = pEmitter->GetRuntimes()[componentId].pRuntime->GetCpuRuntime();
-			if (!pRuntime)
+			if (!pRuntime->IsCPURuntime())
 				continue;
 
 			const CParticleContainer& container = pRuntime->GetContainer();

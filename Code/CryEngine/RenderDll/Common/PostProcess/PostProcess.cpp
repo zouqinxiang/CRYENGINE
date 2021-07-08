@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*=============================================================================
    PostProcess.cpp : Post process main interface
@@ -11,6 +11,7 @@
 #include "StdAfx.h"
 #include "PostEffects.h"
 #include <Cry3DEngine/I3DEngine.h>
+#include <CrySystem/ConsoleRegistration.h>
 
 void CParamBool::SetParam(float fParam, bool bForceValue)
 {
@@ -28,14 +29,14 @@ float CParamBool::GetParam() const
 
 void CParamBool::SyncMainWithRender()
 {
-	CParamBoolThreadSafeData* pFillData = &m_threadSafeData[gRenDev->m_RP.m_nFillThreadID];
+	CParamBoolThreadSafeData* pFillData = &m_threadSafeData[gRenDev->GetMainThreadID()];
 
 	const bool bIsMultiThreaded = (gRenDev->m_pRT) ? (gRenDev->m_pRT->IsMultithreaded()) : false;
 	CParamBoolThreadSafeData* pProcessData = NULL;
 	if (bIsMultiThreaded)
 	{
 		// If value is set on render thread, then this should override main thread value
-		pProcessData = &m_threadSafeData[gRenDev->m_RP.m_nProcessThreadID];
+		pProcessData = &m_threadSafeData[gRenDev->GetRenderThreadID()];
 		if (pProcessData->bSetThisFrame)
 		{
 			pFillData->bParam = pProcessData->bParam;
@@ -67,14 +68,14 @@ float CParamInt::GetParam() const
 }
 void CParamInt::SyncMainWithRender()
 {
-	CParamIntThreadSafeData* pFillData = &m_threadSafeData[gRenDev->m_RP.m_nFillThreadID];
+	CParamIntThreadSafeData* pFillData = &m_threadSafeData[gRenDev->GetMainThreadID()];
 
 	const bool bIsMultiThreaded = (gRenDev->m_pRT) ? (gRenDev->m_pRT->IsMultithreaded()) : false;
 	CParamIntThreadSafeData* pProcessData = NULL;
 	if (bIsMultiThreaded)
 	{
 		// If value is set on render thread, then this should override main thread value
-		pProcessData = &m_threadSafeData[gRenDev->m_RP.m_nProcessThreadID];
+		pProcessData = &m_threadSafeData[gRenDev->GetRenderThreadID()];
 		if (pProcessData->bSetThisFrame)
 		{
 			pFillData->nParam = pProcessData->nParam;
@@ -136,13 +137,13 @@ float CParamFloat::GetParam() const
 void CParamFloat::SyncMainWithRender()
 {
 	// The Effect params can be set/get from both threads, accumulate and sync data here
-	CParamFloatThreadSafeData* pFillData = &m_threadSafeData[gRenDev->m_RP.m_nFillThreadID];
+	CParamFloatThreadSafeData* pFillData = &m_threadSafeData[gRenDev->GetMainThreadID()];
 
 	const bool bIsMultiThreaded = (gRenDev->m_pRT) ? (gRenDev->m_pRT->IsMultithreaded()) : false;
 	CParamFloatThreadSafeData* pProcessData = NULL;
 	if (bIsMultiThreaded)
 	{
-		pProcessData = &m_threadSafeData[gRenDev->m_RP.m_nProcessThreadID];
+		pProcessData = &m_threadSafeData[gRenDev->GetRenderThreadID()];
 		if (pProcessData->nFrameSetCount)
 		{
 			// Add accumulated data from render thread to main thread data
@@ -240,13 +241,13 @@ Vec4 CParamVec4::GetParamVec4() const
 void CParamVec4::SyncMainWithRender()
 {
 	// The Effect params can be set/get from both threads, accumulate and sync data here
-	CParamVec4ThreadSafeData* pFillData = &m_threadSafeData[gRenDev->m_RP.m_nFillThreadID];
+	CParamVec4ThreadSafeData* pFillData = &m_threadSafeData[gRenDev->GetMainThreadID()];
 
 	const bool bIsMultiThreaded = (gRenDev->m_pRT) ? (gRenDev->m_pRT->IsMultithreaded()) : false;
 	CParamVec4ThreadSafeData* pProcessData = NULL;
 	if (bIsMultiThreaded)
 	{
-		pProcessData = &m_threadSafeData[gRenDev->m_RP.m_nProcessThreadID];
+		pProcessData = &m_threadSafeData[gRenDev->GetRenderThreadID()];
 		if (pProcessData->nFrameSetCount)
 		{
 			// Add accumulated data from render thread to main thread data
@@ -404,8 +405,8 @@ int CPostEffectsMgr::Init()
 	AddEffect(CScreenFrost);
 	AddEffect(CAlienInterference);
 	AddEffect(CFlashBang);
-	AddEffect(CFilterSharpening);
-	AddEffect(CFilterBlurring);
+	AddEffect(CSharpening);
+	AddEffect(CBlurring);
 	AddEffect(CColorGrading);
 	AddEffect(CNightVision);
 	AddEffect(CHudSilhouettes);
@@ -414,12 +415,12 @@ int CPostEffectsMgr::Init()
 	AddEffect(CImageGhosting);
 	AddEffect(CPostAA);
 	AddEffect(CPostStereo);
-	AddEffect(C3DHud);
+	AddEffect(CHud3D);
 	AddEffect(CFilterKillCamera);
 	AddEffect(CNanoGlass);
 	AddEffect(CUberGamePostProcess);
-	AddEffect(CSoftAlphaTest);
 	AddEffect(CScreenBlood);
+	AddEffect(CScreenFader);
 	AddEffect(CPost3DRenderer);
 
 	// Sort all post effects by ID
@@ -455,12 +456,15 @@ int CPostEffectsMgr::Init()
 	static float r_3MonHackHUDFOVY;
 	static float r_3MonHackLeftCGFOffsetX;
 	static float r_3MonHackRightCGFOffsetX;
-	REGISTER_CVAR(r_3MonHack, 0, VF_CHEAT | VF_CHEAT_NOCHECK, "Enables 3 monitor hack hud in center");
-	REGISTER_CVAR(r_3MonHackHUDFOVX, 28, VF_CHEAT | VF_CHEAT_NOCHECK, "3 monitor hack hud in center - X FOV");
-	REGISTER_CVAR(r_3MonHackHUDFOVY, 60, VF_CHEAT | VF_CHEAT_NOCHECK, "3 monitor hack hud in center - Y FOV");
-	REGISTER_CVAR(r_3MonHackLeftCGFOffsetX, 0.93f, VF_CHEAT | VF_CHEAT_NOCHECK, "3 monitor hack hud in center - Adds position offset in X direction to all left CGF planes");
-	REGISTER_CVAR(r_3MonHackRightCGFOffsetX, -0.93f, VF_CHEAT | VF_CHEAT_NOCHECK, "3 monitor hack hud in center - Adds position offset in X direction to all right CGF planes");
 
+	if (!gEnv->pConsole->GetCVar("r_3MonHack"))
+	{
+		REGISTER_CVAR(r_3MonHack, 0, VF_CHEAT | VF_CHEAT_NOCHECK, "Enables 3 monitor hack hud in center");
+		REGISTER_CVAR(r_3MonHackHUDFOVX, 28, VF_CHEAT | VF_CHEAT_NOCHECK, "3 monitor hack hud in center - X FOV");
+		REGISTER_CVAR(r_3MonHackHUDFOVY, 60, VF_CHEAT | VF_CHEAT_NOCHECK, "3 monitor hack hud in center - Y FOV");
+		REGISTER_CVAR(r_3MonHackLeftCGFOffsetX, 0.93f, VF_CHEAT | VF_CHEAT_NOCHECK, "3 monitor hack hud in center - Adds position offset in X direction to all left CGF planes");
+		REGISTER_CVAR(r_3MonHackRightCGFOffsetX, -0.93f, VF_CHEAT | VF_CHEAT_NOCHECK, "3 monitor hack hud in center - Adds position offset in X direction to all right CGF planes");
+	}
 	return 1;
 }
 
@@ -471,6 +475,7 @@ void CPostEffectsMgr::CreateResources()
 		std::for_each(m_pEffects.begin(), m_pEffects.end(), SContainerPostEffectCreateResources());
 	m_bCreated = true;
 }
+
 void CPostEffectsMgr::ReleaseResources()
 {
 	if (m_bCreated)
@@ -535,9 +540,9 @@ void CPostEffectsMgr::Reset(bool bOnSpecChange)
 		std::for_each(m_pEffects.begin(), m_pEffects.end(), SContainerPostEffectReset());
 }
 
-int32 CPostEffectsMgr::GetEffectID(const char* pEffectName)
+EPostEffectID CPostEffectsMgr::GetEffectID(const char* pEffectName)
 {
-	int32 effectID = ePFX_Invalid;
+	EPostEffectID effectID = EPostEffectID::Invalid;
 
 	CPostEffectsMgr* pPostMgr = PostEffectMgr();
 	for (CPostEffectItor pItor = pPostMgr->GetEffects().begin(), pItorEnd = pPostMgr->GetEffects().end(); pItor != pItorEnd; ++pItor)
@@ -592,7 +597,7 @@ uint32 CPostEffectsMgr::GetCRC(const char* pszName)
 {
 	if (!pszName)
 	{
-		assert(false && "CPostEffectsMgr::GetCRC() invalid string passed");
+		CRY_ASSERT(false, "CPostEffectsMgr::GetCRC() invalid string passed");
 		return 0;
 	}
 
@@ -619,7 +624,7 @@ uint32 CPostEffectsMgr::GetCRC(const char* pszName)
 
 CEffectParam* CPostEffectsMgr::GetByName(const char* pszParam)
 {
-	CRY_ASSERT_MESSAGE(pszParam, "mfGetByName: null FX name");
+	CRY_ASSERT(pszParam, "mfGetByName: null FX name");
 
 	uint32 nCurrKey = GetCRC(pszParam);
 
@@ -695,21 +700,19 @@ int CParamTexture::Create(const char* pszFileName)
 
 	const int threadID = gRenDev->m_pRT ? gRenDev->m_pRT->GetThreadList() : 0;
 	CParamTextureThreadSafeData* pThreadSafeData = &m_threadSafeData[threadID];
-
+	
 	if (pThreadSafeData->pTexParam)
 	{
 		// check if texture is same
-		if (!strcmpi(pThreadSafeData->pTexParam->GetName(), pszFileName))
+		if (strcmpi(pThreadSafeData->pTexParam->GetName(), pszFileName) == 0)
 		{
 			return 0;
 		}
-		// release texture if required
-		SAFE_RELEASE(pThreadSafeData->pTexParam);
 	}
 
-	pThreadSafeData->pTexParam = CTexture::ForName(pszFileName, FT_DONT_STREAM, eTF_Unknown);
+	pThreadSafeData->pTexParam = CTexture::ForNamePtr(pszFileName, FT_DONT_STREAM, eTF_Unknown);
 	pThreadSafeData->bSetThisFrame = true;
-	CRY_ASSERT_MESSAGE(pThreadSafeData->pTexParam, "CParamTexture.Create: texture not found!");
+	CRY_ASSERT(pThreadSafeData->pTexParam, "CParamTexture.Create: texture not found!");
 
 	return 1;
 }
@@ -721,51 +724,42 @@ const char* CParamTexture::GetParamString() const
 
 void CParamTexture::Release()
 {
-	CParamTextureThreadSafeData* pFillData = &m_threadSafeData[gRenDev->m_RP.m_nFillThreadID];
+	CParamTextureThreadSafeData* pFillData = &m_threadSafeData[gRenDev->GetMainThreadID()];
 
 	const bool bIsMultiThreaded = (gRenDev->m_pRT) ? (gRenDev->m_pRT->IsMultithreaded()) : false;
 	if (bIsMultiThreaded)
 	{
-		CParamTextureThreadSafeData* pProcessData = &m_threadSafeData[gRenDev->m_RP.m_nProcessThreadID];
-		if (pProcessData->pTexParam != pFillData->pTexParam)
-		{
-			SAFE_RELEASE(pProcessData->pTexParam);
-			pProcessData->bSetThisFrame = true;
-		}
+		CParamTextureThreadSafeData* pProcessData = &m_threadSafeData[gRenDev->GetRenderThreadID()];
+		pProcessData->pTexParam = nullptr;
+		pProcessData->bSetThisFrame = true;
 	}
 
-	SAFE_RELEASE(pFillData->pTexParam);
+	pFillData->pTexParam = nullptr;
 	pFillData->bSetThisFrame = true;
 }
 
 void CParamTexture::SyncMainWithRender()
 {
-	CParamTextureThreadSafeData* pFillData = &m_threadSafeData[gRenDev->m_RP.m_nFillThreadID];
+	CParamTextureThreadSafeData* pFillData = &m_threadSafeData[gRenDev->GetMainThreadID()];
 
 	const bool bIsMultiThreaded = (gRenDev->m_pRT) ? (gRenDev->m_pRT->IsMultithreaded()) : false;
 	CParamTextureThreadSafeData* pProcessData = NULL;
 	if (bIsMultiThreaded)
 	{
 		// If value is set on render thread, then this should override main thread value
-		pProcessData = &m_threadSafeData[gRenDev->m_RP.m_nProcessThreadID];
+		pProcessData = &m_threadSafeData[gRenDev->GetRenderThreadID()];
 		if (pProcessData->bSetThisFrame)
 		{
-			if (pFillData->bSetThisFrame)
-			{
-				// If the main thread also set a texture on the same frame (highly unlikely), then release this texture
-				// 1st before overriding it with the texture set from the render thread
-				SAFE_RELEASE(pFillData->pTexParam);
-			}
+			// If the main thread also set a texture on the same frame (highly unlikely),
+			// then override it with the texture set from the render thread
 			pFillData->pTexParam = pProcessData->pTexParam;
 		}
 	}
 
-	// Reset set value
 	pFillData->bSetThisFrame = false;
 
 	if (bIsMultiThreaded)
 	{
-		// Copy fill data into process data
-		memcpy(pProcessData, pFillData, sizeof(CParamTextureThreadSafeData));
+		pProcessData = pFillData;
 	}
 }

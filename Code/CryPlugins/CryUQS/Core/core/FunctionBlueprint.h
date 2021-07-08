@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -20,7 +20,7 @@ namespace UQS
 		public:
 			explicit                         CFunctionBlueprint(Client::IFunctionFactory& functionFactory, const CLeafFunctionReturnValue& leafFunctionReturnValue, bool bAddReturnValueToDebugRenderWorldUponExecution);
 
-			Client::FunctionUniquePtr        InstantiateCallHierarchy(const SQueryBlackboard& blackboard, Shared::CUqsString& error) const;        // returns nullptr if runtime-param type validation failed or insufficient params were provided
+			Client::FunctionUniquePtr        InstantiateCallHierarchy(const SQueryContext& queryContext, Shared::CUqsString& error) const;        // returns nullptr if runtime-param type validation failed or insufficient params were provided
 			Client::IFunctionFactory&        GetFactory() const;
 
 		private:

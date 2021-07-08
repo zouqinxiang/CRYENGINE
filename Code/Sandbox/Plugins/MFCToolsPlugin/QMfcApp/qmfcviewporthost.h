@@ -1,12 +1,13 @@
-// Copyright 2001-2015 Crytek GmbH. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
+#include "MFCToolsDefines.h"
 #include "qwinwidget.h"
 
 class CViewport;
 
-class PLUGIN_API QMfcViewportHost
+class MFC_TOOLS_PLUGIN_API QMfcViewportHost
 {
 public:
 	QMfcViewportHost(CWnd* pParent, CViewport* pViewport, const CRect& rect);
@@ -22,7 +23,7 @@ private:
 	QWinWidget* m_pHost;
 };
 
-class PLUGIN_API QMfcContainer : public CWnd
+class MFC_TOOLS_PLUGIN_API QMfcContainer : public CWnd
 {
 public:
 	QMfcContainer() : m_pWidgetHost(nullptr) {}

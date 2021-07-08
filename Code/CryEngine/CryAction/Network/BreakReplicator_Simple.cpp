@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "BreakReplicator.h"
@@ -727,8 +727,8 @@ void PartBreak::OnEndFrame()
 	}
 }
 
-	#pragma warning(push)
-	#pragma warning(disable : 6262)// 32k of stack space of CBitArray
+#pragma warning(push)
+#pragma warning(disable : 6262)// 32k of stack space of CBitArray
 void PartBreak::SerializeWith(CBitArray& array)
 {
 	SerializeWith_Begin(array, true);
@@ -782,7 +782,7 @@ void PartBreak::SerializeWith(CBitArray& array)
 	LOGBREAK("#   numJointBreaks: %d", m_numJointsBroken);
 	#endif
 }
-	#pragma warning(pop)
+#pragma warning(pop)
 
 void PartBreak::Playback()
 {
@@ -875,13 +875,11 @@ void PlaneBreak::SerializeWith(CBitArray& array)
 
 	SerializeWith_Begin(array, false);
 
-	SBreakEvent& breakEvent = m_be;
-
 	// TODO: entity glass breakage, in entity space
 
 	CBreakReplicator::SerialisePosition(array, m_be.pt, CNetworkCVars::Get().BreakMaxWorldSize, CBreakReplicator::m_accurateWorldPosNumBits);
 
-	m_be.partid[1] = GetSlotIdx(m_be.partid[1], 0) << 8 | GetSlotIdx(m_be.partid[1], 1);
+	m_be.partid[1] = EntityPhysicsUtils::GetSlotIdx(m_be.partid[1], 0) << 8 | EntityPhysicsUtils::GetSlotIdx(m_be.partid[1], 1);
 
 	SerializeDirHelper(array, m_be.n, 8, 8);
 	array.Serialize(m_be.idmat[0], -1, 254);
@@ -891,7 +889,7 @@ void PlaneBreak::SerializeWith(CBitArray& array)
 	array.Serialize(m_be.mass[0], 1.f, 1000.f, 8);
 	SerializeDirVector(array, m_be.vloc[0], 20.f, 8, 8, 8);
 
-	m_be.partid[1] = (m_be.partid[1] & 0xff) + (m_be.partid[1] >> 8) * PARTID_MAX_SLOTS;
+	m_be.partid[1] = (m_be.partid[1] & 0xff) + (m_be.partid[1] >> 8) * EntityPhysicsUtils::PARTID_MAX_SLOTS;
 
 	// Looks like we dont need these
 	m_be.partid[0] = 0;
@@ -973,7 +971,7 @@ bool PlaneBreak::IsRenderMeshReady()
 			{
 				IStatObj::SSubObject* pSubObj;
 				Matrix34A mtx;
-				IStatObj* pStatObj = pRenderNode->GetEntityStatObj(0, 0, &mtx);
+				IStatObj* pStatObj = pRenderNode->GetEntityStatObj(0, &mtx);
 				if (pStatObj && pStatObj->GetFlags() & STATIC_OBJECT_COMPOUND)
 					if (pSubObj = pStatObj->GetSubObject(m_be.partid[1]))
 						pStatObj = pSubObj->pStatObj;
@@ -1254,8 +1252,13 @@ int CBreakReplicator::PushBackNewStream(const EventPhysMono* pMono, BreakStream*
 	pStream->m_identifier.CreateFromPhysicalEntity(pMono);
 
 	// Have we already identified this object before?
+#if DEBUG_NET_BREAKAGE
 	int idx = GetIdentifier(&pStream->m_identifier, pMono->pEntity, true);
 	DEBUG_ASSERT(idx >= 0);
+#else
+	GetIdentifier(&pStream->m_identifier, pMono->pEntity, true);
+#endif
+
 	DEBUG_ASSERT(pStream->m_identifier.m_objType != CObjectIdentifier::k_unknown);
 
 	// NB: This code is run only on the server
@@ -1897,15 +1900,15 @@ void* CBreakReplicator::SerialiseBreakage(TSerialize ser, BreakStream* pStream)
 		array.Serialize(breakIdx, 0, NET_MAX_BREAKS - 1);
 		array.Serialize(subBreakIdx, 0, 255);
 		array.Serialize(type, 1, BreakStream::k_numTypes - 1);
-		assert(pStream == NULL);
+		CRY_ASSERT(pStream == NULL);
 		if (type == BreakStream::k_partBreak)
 			pStream = new PartBreak;
 		if (type == BreakStream::k_planeBreak)
 			pStream = new PlaneBreak;
 		if (type == BreakStream::k_deformBreak)
 			pStream = new DeformBreak;
-		assert(pStream);
-		assert(pStream->m_type == type);
+		CRY_ASSERT(pStream);
+		CRY_ASSERT(pStream->m_type == type);
 		pStream->m_breakIdx = breakIdx;
 		pStream->m_subBreakIdx = subBreakIdx;
 	}

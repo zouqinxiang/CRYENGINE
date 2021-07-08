@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 // Created by: Michael Kopietz
 // Modified: -
@@ -22,8 +22,6 @@
 	#define CPA_FREE  _aligned_free
 #endif
 #define CPA_ASSERT  assert
-#define CPA_ASSERT_STATIC(X) { uint8 assertdata[(X) ? 0 : 1]; }
-#define CPA_BREAK   __debugbreak()
 
 #if CRY_PLATFORM_APPLE
 ILINE void* memalign(size_t nAlign, size_t nSize)
@@ -47,7 +45,5 @@ ILINE void* memalign(size_t nAlign, size_t nSize)
 #endif
 
 #undef CPA_ASSERT
-#undef CPA_ASSERT_STATIC
-#undef CPA_BREAK
 
 #endif

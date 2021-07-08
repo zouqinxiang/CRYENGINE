@@ -1,68 +1,60 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
-/*=============================================================================
-   PostProcess.h : Post processing techniques base interface
+#pragma once
 
-   Revision history:
-* 18/06/2005: Re-organized (to minimize code dependencies/less annoying compiling times)
-* 23/02/2005: Re-factored/Converted to CryEngine 2.0
-* Created by Tiago Sousa
-
-   =============================================================================*/
-
-#ifndef _POSTPROCESS_H_
-#define _POSTPROCESS_H_
+struct SRenderViewInfo;
 
 class CShader;
 class CTexture;
+class CPostEffectContext;
 
 // Declare effects ID - this will also be used as rendering sort order
-enum EPostEffectID
+enum EPostEffectID : int8
 {
-	ePFX_Invalid     = -1,
+	Invalid     = -1,
 
 	// Don't change order of post processes before sunshafts (on pc we doing some trickery to avoid redundant stretchrects)
-	ePFX_SunShafts = 0,
-	ePFX_eMotionBlur,
-	ePFX_ColorGrading,
-	ePFX_eDepthOfField,
-	ePFX_HUDSilhouettes,
+	SunShafts = 0,
+	MotionBlur,
+	ColorGrading,
+	DepthOfField,
+	HUDSilhouettes,
 
-	ePFX_eSoftAlphaTest,
+	PostAA,
 
-	ePFX_PostAA,
-
-	ePFX_eUnderwaterGodRays,
-	ePFX_eVolumetricScattering,
+	UnderwaterGodRays,
+	VolumetricScattering,
 
 	// todo: merge all following into UberGamePostProcess
-	ePFX_FilterSharpening,
-	ePFX_FilterBlurring,
-	ePFX_UberGamePostProcess,
+	Sharpening,
+	Blurring,
+	UberGamePostProcess,
 
-	ePFX_NightVision,
-	ePFX_SonarVision,
-	ePFX_ThermalVision,
+	NightVision,
+	SonarVision,
+	ThermalVision,
 
-	ePFX_eFlashBang,
+	FlashBang,
 
-	ePFX_ImageGhosting,
-	ePFX_NanoGlass,
+	ImageGhosting,
+	NanoGlass,
 
-	ePFX_eRainDrops,
-	ePFX_eWaterDroplets,
-	ePFX_eWaterFlow,
-	ePFX_eScreenBlood,
-	ePFX_eScreenFrost,
+	RainDrops,
+	WaterDroplets,
+	WaterFlow,
+	ScreenBlood,
+	ScreenFrost,
 
-	ePFX_FilterKillCamera,
-	ePFX_eAlienInterference,
-	ePFX_PostStereo,
-	ePFX_3DHUD,
+	KillCamera,
+	AlienInterference,
+	PostStereo,
+	HUD3D,
 
-	ePFX_Post3DRenderer,
+	ScreenFader,
 
-	ePFX_Max
+	Post3DRenderer,
+
+	Num
 };
 
 //////////////////////////////////////////////////////////////////////
@@ -300,15 +292,15 @@ private:
 	{
 		for (int i = 0; i < RT_COMMAND_BUF_COUNT; ++i)
 		{
-			m_threadSafeData[i].pTexParam = NULL;
+			m_threadSafeData[i].pTexParam = nullptr;
 			m_threadSafeData[i].bSetThisFrame = false;
 		}
 	}
 
 	struct CParamTextureThreadSafeData
 	{
-		CTexture* pTexParam;
-		bool      bSetThisFrame;
+		_smart_ptr<CTexture> pTexParam;
+		bool                 bSetThisFrame;
 	};
 
 	CParamTextureThreadSafeData m_threadSafeData[RT_COMMAND_BUF_COUNT];
@@ -329,7 +321,7 @@ enum EPostProcessRenderFlag
 class CPostEffect
 {
 public:
-	CPostEffect() : m_pActive(0), /*m_nID(ePFX_DefaultID),*/ m_nRenderFlags(PSP_UPDATE_BACKBUFFER)
+	CPostEffect() : m_nRenderFlags(PSP_UPDATE_BACKBUFFER), m_pActive(0) /*, m_nID(ePFX_DefaultID),*/
 	{
 	}
 
@@ -339,17 +331,17 @@ public:
 	}
 
 	// Initialize post processing technique - device access allowed (queries, ...)
-	virtual int  Initialize()      { return 1; }
+	virtual int  Init()                                                                                                   { return 1; }
 	// Create all the resources for the pp effects which don't require the device (such as textures)
-	virtual int  CreateResources() { return 1; }
+	virtual int  CreateResources()                                                                                        { return 1; }
 	// Free resources used
-	virtual void Release()         {}
+	virtual void Release()                                                                                                {}
 	// Preprocess technique
-	virtual bool Preprocess()      { return IsActive(); }
+	virtual bool Preprocess(const SRenderViewInfo& viewInfo)                                                              { return IsActive(); }
 	// Some effects might require updating data/parameters, etc
-	virtual void Update()          {};
+	virtual void Update()                                                                                                 {}
 	// Render technique
-	virtual void Render() = 0;
+	virtual void Execute() = 0;
 	// Reset technique state to default
 	virtual void Reset(bool bOnSpecChange = false) = 0;
 	// release resources when required
@@ -358,7 +350,7 @@ public:
 	// Add render element/object to post process (use for custom geometry)
 	virtual void AddRE(const CRenderElement* pRE, const SShaderItem* pShaderItem, CRenderObject* pObj, const SRenderingPassInfo& passInfo) {}
 	// release resources when required
-	virtual void OnBeginFrame(const SRenderingPassInfo& passInfo)                                                                            {}
+	virtual void OnBeginFrame(const SRenderingPassInfo& passInfo)                                                                          {}
 
 	// Get technique render flags
 	int GetRenderFlags() const
@@ -379,15 +371,22 @@ public:
 		return (fActive) ? 1 : 0;
 	}
 
-	inline uint8 GetID() const
+	inline EPostEffectID GetID() const
 	{
 		return m_nID;
 	}
 
+public:
+	CPostEffectContext* GetCurrentContext()                      { return m_pCurrentContext; }
+	void                SetCurrentContext(CPostEffectContext* p) { m_pCurrentContext = p; }
+
 protected:
 	uint8         m_nRenderFlags;
-	uint8         m_nID;
+	EPostEffectID m_nID;
 	CEffectParam* m_pActive;
+
+	// For using in old effects
+	CPostEffectContext* m_pCurrentContext = nullptr;
 };
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -420,7 +419,7 @@ class CPostEffectsMgr;
 static CPostEffectsMgr* PostEffectMgr();
 
 // Post process effects manager
-class CPostEffectsMgr
+class CPostEffectsMgr : public ISyncMainWithRenderListener
 {
 public:
 	CPostEffectsMgr()
@@ -452,10 +451,15 @@ public:
 		m_activeEffectsDebug.reserve(16);
 		m_activeParamsDebug.reserve(32);
 #endif
+		if (gEnv && gEnv->pRenderer)
+			gEnv->pRenderer->RegisterSyncWithMainListener(this);
 	}
 
 	virtual ~CPostEffectsMgr()
 	{
+		if (gEnv && gEnv->pRenderer)
+			gEnv->pRenderer->RemoveSyncWithMainListener(this);
+
 		Release();
 	}
 
@@ -470,13 +474,13 @@ public:
 	// Start processing effects
 	void Begin();
 	// End processing effects
-	void End();
+	void End(CRenderView* pRenderView);
 	// release resources when required
 	void OnLostDevice();
 	// release resources when required
 	void OnBeginFrame(const SRenderingPassInfo& passInfo);
 	// Sync main thread post effect data with render thread post effect data
-	void SyncMainWithRender();
+	void SyncMainWithRender() final;
 
 	// Get techniques list
 	CPostEffectVec& GetEffects()
@@ -491,12 +495,12 @@ public:
 	// Get post effect
 	CPostEffect* GetEffect(EPostEffectID nID)
 	{
-		assert(nID < ePFX_Max);
+		assert(nID < EPostEffectID::Num);
 		return m_pEffects[nID];
 	}
 
 	// Get post effect ID
-	int32 GetEffectID(const char* pEffectName);
+	EPostEffectID GetEffectID(const char* pEffectName);
 
 	// Get name to id map
 	KeyEffectMap& GetNameIdMap()
@@ -542,7 +546,7 @@ public:
 
 	static bool             CheckPostProcessQuality(ERenderQuality nMinRQ, EShaderQuality nMinSQ)
 	{
-		if (gRenDev->m_RP.m_eQuality >= nMinRQ && gRenDev->EF_GetShaderQuality(eST_PostProcess) >= nMinSQ)
+		if (gRenDev->EF_GetRenderQuality() >= nMinRQ && gRenDev->EF_GetShaderQuality(eST_PostProcess) >= nMinSQ)
 			return true;
 
 		return false;
@@ -674,7 +678,7 @@ struct SContainerPostEffectInitialize
 	{
 		if (pObj)
 		{
-			pObj->Initialize();
+			pObj->Init();
 		}
 	}
 };
@@ -731,5 +735,3 @@ struct SContainerPostEffectOnBeginFrame
 			pObj->OnBeginFrame(localPassInfo);
 	}
 };
-
-#endif

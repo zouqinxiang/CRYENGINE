@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include <CryAISystem/IAISystem.h>
@@ -54,7 +54,7 @@ namespace UQS
 			}
 		}
 
-		void CItemMonitor_NavMeshChangesInAABB::OnNavMeshChanged(NavigationAgentTypeID agentTypeID, NavigationMeshID meshID, uint32 tileID)
+		void CItemMonitor_NavMeshChangesInAABB::OnNavMeshChanged(NavigationAgentTypeID agentTypeID, NavigationMeshID meshID, MNM::TileID tileID)
 		{
 			AABB tileAABB;
 			gEnv->pAISystem->GetNavigationSystem()->GetTileBoundsForMesh(meshID, tileID, tileAABB);

@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #ifndef __TAG_DEFINITION_XML__H__
 #define __TAG_DEFINITION_XML__H__
@@ -12,8 +12,8 @@ struct STagDefinitionImportsInfo
 {
 	void SetFilename(const char* const filename)
 	{
-		assert(filename);
-		assert(filename[0]);
+		CRY_ASSERT(filename);
+		CRY_ASSERT(filename[0]);
 
 		m_filename = filename;
 	};
@@ -39,8 +39,8 @@ struct STagDefinitionImportsInfo
 
 	STagDefinitionImportsInfo& AddImport(const char* const filename)
 	{
-		assert(filename);
-		assert(filename[0]);
+		CRY_ASSERT(filename);
+		CRY_ASSERT(filename[0]);
 
 		m_imports.push_back(STagDefinitionImportsInfo());
 		STagDefinitionImportsInfo& importsInfo = m_imports.back();

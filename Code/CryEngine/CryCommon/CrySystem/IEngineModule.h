@@ -1,9 +1,8 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
 #include <CryExtension/ICryUnknown.h>
-#include <CrySystem/ICryAutoCleanup.h>
 
 struct SSystemInitParams;
 struct SSystemGlobalEnvironment;
@@ -11,9 +10,9 @@ struct SSystemGlobalEnvironment;
 namespace Cry
 {
 	//! Base Interface for all engine module extensions.
-	struct IDefaultModule : public ICryUnknown, IAutoCleanup
+	struct IDefaultModule : public ICryUnknown
 	{
-		CRYINTERFACE_DECLARE(IDefaultModule, 0xf899cf661df04f61, 0xa341a8a7ffdf9de4);
+		CRYINTERFACE_DECLARE_GUID(IDefaultModule, "f899cf66-1df0-4f61-a341-a8a7ffdf9de4"_cry_guid);
 
 		// <interfuscator:shuffle>
 		//! Retrieve name of the extension module.

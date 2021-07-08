@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -29,6 +29,9 @@ namespace UQS
 			const char*             GetError(size_t index) const;
 
 		private:
+			template <class TFactoryDB>
+			void                    CheckFactoryDatabaseConsistency(const TFactoryDB& factoryDB, const char* szFactoryDatabaseNameForErrorMessages);
+
 			void                    CheckInputParametersConsistency(const Client::IInputParameterRegistry& registry, const char* szErrorMessagePrefix);
 
 #if UQS_SCHEMATYC_SUPPORT

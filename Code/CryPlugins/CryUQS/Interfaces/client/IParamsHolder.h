@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -74,7 +74,7 @@ namespace UQS
 
 		inline void CParamsHolderDeleter::operator()(IParamsHolder* pParamsHolderToDelete)
 		{
-			assert(m_pParamsHolderFactory);
+			CRY_ASSERT(m_pParamsHolderFactory);
 			m_pParamsHolderFactory->DestroyParamsHolder(pParamsHolderToDelete);
 		}
 

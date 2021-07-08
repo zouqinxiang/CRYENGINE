@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "stdafx.h"
 #include "AnimEventLoader.h"
@@ -81,7 +81,7 @@ void AnimEventLoader::DoAdditionalAnimEventInitialization(const char* animationF
 {
 	// NB. Currently, this is only executed when the events are created from an xml file, so for example the editor will
 	// not be executing logic contained here while editing animation events.
-	assert(animationFilePath);
+	CRY_ASSERT(animationFilePath);
 
 	static const uint32 s_crc32_effect = CCrc32::ComputeLowercase("effect");
 	const uint32 eventNameCRC32 = animEvent.GetNameLowercaseCRC32();

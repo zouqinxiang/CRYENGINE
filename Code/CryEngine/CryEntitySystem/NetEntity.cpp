@@ -1,30 +1,25 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 #include "stdafx.h"
 
 #include "NetEntity.h"
 #include "Entity.h"
 #include <CryGame/IGameFramework.h>
-
+#include <CryPhysics/physinterface.h>
 #include <set>
 
 class CNetEntity;
 static std::set<CNetEntity*> g_updateSchedulingProfile;
 static CryCriticalSection g_updateSchedulingProfileCritSec;
 
-CNetEntity::CNetEntity(IEntity *entity_)
-	: m_pEntity(entity_)
-	, m_channelId(0)
-	, m_enabledAspects(NET_ASPECT_ALL)
-	, m_delegatableAspects(NET_ASPECT_ALL)
+CNetEntity::CNetEntity(CEntity* pEntity, const SEntitySpawnParams& params)
+	: m_pEntity(pEntity)
 	, m_isBoundToNetwork(false)
 	, m_bNoSyncPhysics(false)
-	, m_pProfileManager(0)
-	, m_cachedParentId(0)
-	, m_schedulingProfiles(gEnv->pGameFramework->GetEntitySchedulerProfiles(entity_))
 	, m_hasAuthority(false)
+	, m_schedulingProfiles(gEnv->pGameFramework->GetEntitySchedulerProfiles(pEntity))
+	, m_pSpawnSerializer(params.pSpawnSerializer)
 {
-	for (int i = 0; i < NUM_ASPECTS; i++)
-		m_profiles[i] = 255;
+	m_profiles.fill(255);
 };
 
 CNetEntity::~CNetEntity()
@@ -44,6 +39,7 @@ NetworkAspectType CNetEntity::CombineAspects()
 		eEA_GameServerDynamic |
 		eEA_GameClientStatic |
 		eEA_GameServerStatic |
+		eEA_Aspect30 |
 		eEA_Aspect31 |
 		eEA_GameClientA |
 		eEA_GameServerA |
@@ -68,8 +64,10 @@ NetworkAspectType CNetEntity::CombineAspects()
 		eEA_GameServerE;
 
 	NetworkAspectType aspects = 0;
-	((CEntity *)m_pEntity)->m_components.ForEachSorted([&aspects](const SEntityComponentRecord& componentRecord) {
+	m_pEntity->m_components.NonRecursiveForEach([&aspects](const SEntityComponentRecord& componentRecord) -> EComponentIterationResult
+	{
 		aspects |= componentRecord.pComponent->GetNetSerializeAspectMask();
+		return EComponentIterationResult::Continue;
 	});
 	aspects &= gameObjectAspects;
 
@@ -114,7 +112,7 @@ bool CNetEntity::BindToNetworkWithParent(EBindToNetworkMode mode, EntityId paren
 	if (m_pEntity->GetFlags() & (ENTITY_FLAG_CLIENT_ONLY | ENTITY_FLAG_SERVER_ONLY))
 		return false;
 
-	if (!m_pEntity->IsInitialized())
+	if (!m_pEntity->HasInternalFlag(CEntity::EInternalFlag::Initialized))
 	{
 		m_cachedParentId = parentId;
 		m_isBoundToNetwork = true;
@@ -130,13 +128,11 @@ bool CNetEntity::BindToNetworkWithParent(EBindToNetworkMode mode, EntityId paren
 			gEnv->pGameFramework->SetServerChannelPlayerId(GetChannelId(), m_pEntity->GetId());
 		}
 
-		bool isStatic = gEnv->pGameFramework->IsInLevelLoad();
-		if (m_pEntity->GetFlags() & ENTITY_FLAG_NEVER_NETWORK_STATIC)
-			isStatic = false;
+		const bool isStatic = m_pEntity->IsLoadedFromLevelFile() || m_pEntity->GetId() == 1;
 
-		auto eid = m_pEntity->GetId();
-		gEnv->pNetContext->BindObject(eid, parentId, CombineAspects(), isStatic);
-		gEnv->pNetContext->SetDelegatableMask(eid, m_delegatableAspects);
+		const EntityId entityId = m_pEntity->GetId();
+		gEnv->pNetContext->BindObject(entityId, parentId, CombineAspects(), isStatic);
+		gEnv->pNetContext->SetDelegatableMask(entityId, m_delegatableAspects);
 	}
 
 	m_isBoundToNetwork = true;
@@ -178,9 +174,10 @@ bool CNetEntity::HasProfileManager()
 
 bool CNetEntity::NetSerializeEntity(TSerialize ser, EEntityAspects aspect, uint8 profile, int flags)
 {
-	NetworkAspectType aspects = 0;
-	((CEntity *)m_pEntity)->m_components.ForEachSorted([&](const SEntityComponentRecord& componentRecord) {
+	m_pEntity->m_components.ForEach([&ser, aspect, profile, flags](const SEntityComponentRecord& componentRecord) -> EComponentIterationResult
+	{
 		componentRecord.pComponent->NetSerialize(ser, aspect, profile, flags);
+		return EComponentIterationResult::Continue;
 	});
 
 	// #netentity: compare to GameContext::SynchObject, physics aspect. what happens there and here?
@@ -192,13 +189,16 @@ bool CNetEntity::NetSerializeEntity(TSerialize ser, EEntityAspects aspect, uint8
 	return true;
 }
 
-void CNetEntity::RmiRegister(SRmiHandler& handler)
+void CNetEntity::RmiRegister(const SRmiHandler& handler)
 {
+#if defined(USE_CRY_ASSERT)
 	auto found = std::find_if(m_rmiHandlers.begin(), m_rmiHandlers.end(),
 		[&handler](SRmiHandler &p) { return p.decoder == handler.decoder; });
-	CRY_ASSERT_MESSAGE(found == m_rmiHandlers.end(), "Registering a duplicate RMI message.");
+#endif
 
-	CRY_ASSERT_MESSAGE(m_rmiHandlers.size() < std::numeric_limits<decltype(SRmiIndex::value)>::max(),
+	CRY_ASSERT(found == m_rmiHandlers.end(), "Registering a duplicate RMI message.");
+
+	CRY_ASSERT(m_rmiHandlers.size() < std::numeric_limits<decltype(SRmiIndex::value)>::max(),
 		"Too many RMIs registered for the entity %s (%d)",
 		m_pEntity->GetName(), m_pEntity->GetId());
 
@@ -209,7 +209,7 @@ INetEntity::SRmiIndex CNetEntity::RmiByDecoder(SRmiHandler::DecoderF decoder, SR
 {
 	auto found = std::find_if(m_rmiHandlers.begin(), m_rmiHandlers.end(),
 		[&decoder](SRmiHandler &p) { return p.decoder == decoder; });
-	CRY_ASSERT_MESSAGE(found != m_rmiHandlers.end(), "Sending an unregistered RMI message.");
+	CRY_ASSERT(found != m_rmiHandlers.end(), "Sending an unregistered RMI message.");
 
 	*handler = &*found;
 	return SRmiIndex(found - m_rmiHandlers.begin());
@@ -356,7 +356,7 @@ bool CNetEntity::DoSetAspectProfile(EEntityAspects aspect, uint8 profile, bool f
 
 void CNetEntity::SetNetworkParent(EntityId id)
 {
-	if (!m_pEntity->IsInitialized())
+	if (!m_pEntity->HasInternalFlag(CEntity::EInternalFlag::Initialized))
 	{
 		m_cachedParentId = id;
 		return;
@@ -381,7 +381,48 @@ uint8 CNetEntity::GetDefaultProfile(EEntityAspects aspect)
 		return 0;
 }
 
-void CNetEntity::UpdateSchedulingProfiles()
+void CNetEntity::OnNetworkedEntityTransformChanged(EntityTransformationFlagsMask transformReasons)
+{
+	if (gEnv->bMultiplayer && (m_pEntity->GetFlags() & (ENTITY_FLAG_CLIENT_ONLY | ENTITY_FLAG_SERVER_ONLY)) == 0)
+	{
+		bool doAspectUpdate = true;
+		if (transformReasons.Check(ENTITY_XFORM_FROM_PARENT) && transformReasons.Check(ENTITY_XFORM_NO_PROPOGATE))
+			doAspectUpdate = false;
+		// position has changed, best let other people know about it
+		// disabled volatile... see OnSpawn for reasoning
+		if (doAspectUpdate && gEnv->pNetContext)
+		{
+			gEnv->pNetContext->ChangedAspects(m_pEntity->GetId(), /*eEA_Volatile |*/ eEA_Physics);
+		}
+#if FULL_ON_SCHEDULING
+		float drawDistance = -1;
+		if (IEntityRender* pRP = pEntity->GetRenderInterface())
+			if (IRenderNode* pRN = pRP->GetRenderNode())
+				drawDistance = pRN->GetMaxViewDist();
+		m_pNetContext->ChangedTransform(entId, pEntity->GetWorldPos(), pEntity->GetWorldRotation(), drawDistance);
+#endif
+	}
+}
+
+void CNetEntity::OnComponentAddedDuringInitialization(IEntityComponent* pComponent) const
+{
+	if (m_pSpawnSerializer == nullptr)
+		return;
+
+	const bool isNetworked = !pComponent->GetComponentFlags().CheckAny({ EEntityComponentFlags::ServerOnly, EEntityComponentFlags::ClientOnly, EEntityComponentFlags::NetNotReplicate });
+	if (isNetworked)
+	{
+		pComponent->NetReplicateSerialize(*m_pSpawnSerializer);
+	}
+}
+
+void CNetEntity::OnEntityInitialized()
+{
+	// Spawn serializer will be released after entity initialization
+	m_pSpawnSerializer = nullptr;
+}
+
+/* static */ void CNetEntity::UpdateSchedulingProfiles()
 {
 	// We need to check NetContext here, because it's NULL in a dummy editor game session (or at least while starting up the editor).
 	if (!gEnv->pNetContext)

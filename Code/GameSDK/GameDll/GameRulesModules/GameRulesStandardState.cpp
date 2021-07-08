@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
 	-------------------------------------------------------------------------
@@ -19,6 +19,7 @@
 #include "GameCVars.h"
 #include "IGameObject.h"
 #include <CryNetwork/ISerialize.h>
+#include <CrySystem/ConsoleRegistration.h>
 #include "GameRulesModules/IGameRulesStatsRecording.h"
 #include "GameRulesModules/IGameRulesPlayerStatsModule.h"
 #include "UI/HUD/HUDEventWrapper.h"
@@ -720,12 +721,12 @@ void CGameRulesStandardState::EnterPostGameState( EPostGameState state )
 					{
 						if(!pRecordingSystem->PlayWinningKillcam())
 						{
-							CRY_ASSERT_MESSAGE(false, "There should be a Winning Kill queued up when we get here...");
+							CRY_ASSERT(false, "There should be a Winning Kill queued up when we get here...");
 						}
 					}
 					else
 					{
-						CRY_ASSERT_MESSAGE(false, "There should be a Winning Kill queued up when we get here...");
+						CRY_ASSERT(false, "There should be a Winning Kill queued up when we get here...");
 					}
 				}
 			}

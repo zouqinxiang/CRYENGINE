@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "AnimatedCharacter.h"
@@ -17,14 +17,16 @@
 
 #include <IViewSystem.h>
 
-char* g_szMCMString[eMCM_COUNT] = { "Undefined", "Entity", "Animation", "DecoupledCatchUp", "ClampedEntity", "SmoothedEntity", "AnimationHCollision" };
-char* g_szColliderModeString[eColliderMode_COUNT] = { "Undefined", "Disabled", "GroundedOnly", "Pushable", "NonPushable", "PushesPlayersOnly", "Spectator" };
-char* g_szColliderModeLayerString[eColliderModeLayer_COUNT] = { "AG", "Game", "Script", "FG", "Anim", "Sleep", "Debug" };
+const char* g_szMCMString[eMCM_COUNT] = { "Undefined", "Entity", "Animation", "DecoupledCatchUp", "ClampedEntity", "SmoothedEntity", "AnimationHCollision" };
+const char* g_szColliderModeString[eColliderMode_COUNT] = { "Undefined", "Disabled", "GroundedOnly", "Pushable", "NonPushable", "PushesPlayersOnly", "Spectator" };
+const char* g_szColliderModeLayerString[eColliderModeLayer_COUNT] = { "AG", "Game", "Script", "FG", "Anim", "Sleep", "Debug" };
 
 #define ANIMCHAR_MEM_DEBUG // Memory Allocation Tracking
 #undef  ANIMCHAR_MEM_DEBUG
 
+#if !defined(_RELEASE)
 #define ENABLE_NAN_CHECK
+#endif
 
 #ifndef _RELEASE
 	#define VALIDATE_CHARACTER_PTRS ValidateCharacterPtrs();
@@ -35,7 +37,7 @@ char* g_szColliderModeLayerString[eColliderModeLayer_COUNT] = { "AG", "Game", "S
 #undef CHECKQNAN_FLT
 #if defined(ENABLE_NAN_CHECK)
 	#define CHECKQNAN_FLT(x) \
-	  assert(((*(unsigned*)&(x)) & 0xff000000) != 0xff000000u && (*(unsigned*)&(x) != 0x7fc00000))
+	  CRY_ASSERT(((*(unsigned*)&(x)) & 0xff000000) != 0xff000000u && (*(unsigned*)&(x) != 0x7fc00000))
 #else
 	#define CHECKQNAN_FLT(x) (void*)0
 #endif
@@ -74,6 +76,7 @@ bool CheckNANVec(Vec3& v, IEntity* pEntity)
 {
 	if (!CheckNAN(v.x) || !CheckNAN(v.y) || !CheckNAN(v.z))
 	{
+#if !defined(EXCLUDE_NORMAL_LOG)
 		if (ICharacterInstance* pCharacter = pEntity->GetCharacter(0))
 		{
 			int numAnims = pCharacter->GetISkeletonAnim()->GetNumAnimsInFIFO(0);
@@ -83,6 +86,7 @@ bool CheckNANVec(Vec3& v, IEntity* pEntity)
 				CryLogAlways("NAN on AnimationID:%d, model:%s, entity:%s", anim.GetAnimationId(), pCharacter->GetFilePath(), pEntity->GetName());
 			}
 		}
+#endif
 
 		v.zero();
 		return false;
@@ -225,7 +229,7 @@ CAnimatedCharacter::~CAnimatedCharacter()
 	DisableRigidCollider();
 	DestroyExtraSolidCollider();
 
-	CRY_ASSERT_MESSAGE(!m_pActionController, "ActionController should already be deleted. If not, the Exit of actions in the destructor could involve invalid objects.");
+	CRY_ASSERT(!m_pActionController, "ActionController should already be deleted. If not, the Exit of actions in the destructor could involve invalid objects.");
 	DeleteActionController();
 }
 
@@ -322,6 +326,7 @@ void CAnimatedCharacter::InitVars()
 	m_bPendingRagdoll = false;
 	m_pMannequinAGState = NULL;
 	m_proxiesInitialized = false;
+	m_lastACFirstPerson = false;
 
 	for (int layer = 0; layer < eAnimationGraphLayer_COUNT; ++layer)
 	{
@@ -459,9 +464,18 @@ bool CAnimatedCharacter::InitializeMannequin()
 	if (m_pActionController)
 	{
 		IMannequin& mannequinSys = gEnv->pGameFramework->GetMannequinInterface();
-		m_pAnimDatabase3P = mannequinSys.GetAnimationDatabaseManager().Load(mannequinSetup.animDatabase3P);
-		m_pAnimDatabase1P = mannequinSys.GetAnimationDatabaseManager().Load(mannequinSetup.animDatabase1P);
-		m_pSoundDatabase = mannequinSys.GetAnimationDatabaseManager().Load(mannequinSetup.soundDatabase);
+		if (!mannequinSetup.animDatabase3P.empty())
+		{
+			m_pAnimDatabase3P = mannequinSys.GetAnimationDatabaseManager().Load(mannequinSetup.animDatabase3P);
+		}
+		if (!mannequinSetup.animDatabase1P.empty())
+		{
+			m_pAnimDatabase1P = mannequinSys.GetAnimationDatabaseManager().Load(mannequinSetup.animDatabase1P);
+		}
+		if (!mannequinSetup.soundDatabase.empty())
+		{
+			m_pSoundDatabase = mannequinSys.GetAnimationDatabaseManager().Load(mannequinSetup.soundDatabase);
+		}
 	}
 
 	m_useMannequinAGState = mannequinSetup.useMannequinAGState;
@@ -486,7 +500,7 @@ void CAnimatedCharacter::Release()
 
 void CAnimatedCharacter::FullSerialize(TSerialize ser)
 {
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "Animated character serialization");
+	MEMSTAT_CONTEXT(EMemStatContextType::Other, "Animated character serialization");
 
 #define SerializeMember(member)                    ser.Value( # member, member)
 #define SerializeMemberType(type, member)          { type temp = member; ser.Value( # member, temp); if (isReading) member = temp; }
@@ -554,7 +568,7 @@ void CAnimatedCharacter::FullSerialize(TSerialize ser)
 
 	char mcm[32] = "m_movementControlMethod";
 	static const int basicStringLength = 23;
-	assert(strlen(mcm) == basicStringLength);
+	CRY_ASSERT(strlen(mcm) == basicStringLength);
 	for (int slot = 0; slot < eMCMSlot_COUNT; ++slot)
 	{
 		mcm[basicStringLength] = 'H';
@@ -581,25 +595,23 @@ void CAnimatedCharacter::PostSerialize()
 
 void CAnimatedCharacter::Update(SEntityUpdateContext& ctx, int slot)
 {
-	FUNCTION_PROFILER(GetISystem(), PROFILE_ACTION);
+	CRY_PROFILE_FUNCTION(PROFILE_ACTION);
 
-	//assert(!m_simplifyMovement); // If we have simplified movement, the this GameObject extension should not be updated here.
+	//CRY_ASSERT(!m_simplifyMovement); // If we have simplified movement, the this GameObject extension should not be updated here.
 
-	assert(m_entLocation.IsValid());
-	//assert(m_colliderModeLayers[eColliderModeLayer_ForceSleep] == eColliderMode_Undefined);
+	CRY_ASSERT(m_entLocation.IsValid());
+	//CRY_ASSERT(m_colliderModeLayers[eColliderModeLayer_ForceSleep] == eColliderMode_Undefined);
 
 	if (m_simplifyMovement)
 	{
 		GetCurrentEntityLocation();
 	}
 
-	float EntRotZ = RAD2DEG(m_entLocation.q.GetRotZ());
-
-	assert(m_entLocation.IsValid());
+	CRY_ASSERT(m_entLocation.IsValid());
 
 	SetAnimationPostProcessParameters();
 
-	assert(m_entLocation.IsValid());
+	CRY_ASSERT(m_entLocation.IsValid());
 
 	/*
 	   This code which was around here is highly suspect; I suggest we fix 'standing on moving platforms' in a better way
@@ -626,7 +638,7 @@ void CAnimatedCharacter::Update(SEntityUpdateContext& ctx, int slot)
 	   }
 	 */
 
-	assert(m_entLocation.IsValid());
+	CRY_ASSERT(m_entLocation.IsValid());
 
 	/*
 	   CRYANIMATION2
@@ -711,7 +723,7 @@ void CAnimatedCharacter::HandleEvent(const SGameObjectEvent& event)
 			/*
 			      // This might happen for faked collisions, such as punches.
 			      else
-			        assert(!"Entity recieved collision event without being part of collision!");
+			        CRY_ASSERT(!"Entity recieved collision event without being part of collision!");
 			 */
 			// We only care about the horizontal part, so we remove the vertical component for simplicity.
 			m_collisionNormal[m_collisionNormalCount].z = 0.0f;
@@ -777,7 +789,7 @@ void CAnimatedCharacter::ResetState()
 void CAnimatedCharacter::ResetVars()
 {
 	IEntity* pEntity = GetEntity();
-	assert(pEntity);
+	CRY_ASSERT(pEntity);
 
 	m_params.Reset();
 
@@ -826,7 +838,7 @@ void CAnimatedCharacter::ResetVars()
 	if (pEntity)
 	{
 		IActorSystem* pActorSystem = CCryAction::GetCryAction()->GetIActorSystem();
-		assert(pActorSystem != NULL);
+		CRY_ASSERT(pActorSystem != NULL);
 		IActor* pActor = pActorSystem->GetActor(pEntity->GetId());
 
 		//No longer asserting, as the animated character is no longer just used on actors
@@ -1024,8 +1036,8 @@ void CAnimatedCharacter::AddMovement(const SCharacterMoveRequest& request)
 {
 	if (request.type != eCMT_None)
 	{
-		assert(request.rotation.IsValid());
-		assert(request.velocity.IsValid());
+		CRY_ASSERT(request.rotation.IsValid());
+		CRY_ASSERT(request.velocity.IsValid());
 
 		CheckNANVec(Vec3(request.velocity), GetEntity());
 
@@ -1033,8 +1045,8 @@ void CAnimatedCharacter::AddMovement(const SCharacterMoveRequest& request)
 		m_moveRequest = request;
 		m_moveRequestFrameID = gEnv->nMainFrameID;
 
-		assert(m_moveRequest.rotation.IsValid());
-		assert(m_moveRequest.velocity.IsValid());
+		CRY_ASSERT(m_moveRequest.rotation.IsValid());
+		CRY_ASSERT(m_moveRequest.velocity.IsValid());
 	}
 	else
 	{
@@ -1051,11 +1063,12 @@ void CAnimatedCharacter::AddMovement(const SCharacterMoveRequest& request)
 //////////////////////////////////////////////////////////////////////////
 void CAnimatedCharacter::ValidateCharacterPtrs()
 {
+#if defined(USE_CRY_ASSERT)
 	ICharacterInstance* pCharacter = GetEntity()->GetCharacter(0);
 	ICharacterInstance* pShadowCharacter = m_hasShadowCharacter ? GetEntity()->GetCharacter(m_shadowCharacterSlot) : NULL;
-
 	const bool characterChanged = (pCharacter != m_pCharacter) || (m_pShadowCharacter != pShadowCharacter);
-	CRY_ASSERT_TRACE(!characterChanged, ("CharacterPtrs out of date in %s. Ensure that updateCharacterPtrs is called on the animatedCharacter whenever new models are loaded", GetEntity()->GetName()));
+	CRY_ASSERT(!characterChanged, "CharacterPtrs out of date in %s. Ensure that updateCharacterPtrs is called on the animatedCharacter whenever new models are loaded", GetEntity()->GetName());
+#endif
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1153,9 +1166,9 @@ void CAnimatedCharacter::UpdateCharacterPtrs()
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CAnimatedCharacter::ProcessEvent(SEntityEvent& event)
+void CAnimatedCharacter::ProcessEvent(const SEntityEvent& event)
 {
-	FUNCTION_PROFILER(gEnv->pSystem, PROFILE_ACTION);
+	CRY_PROFILE_FUNCTION(PROFILE_ACTION);
 
 	switch (event.event)
 	{
@@ -1277,6 +1290,11 @@ void CAnimatedCharacter::ProcessEvent(SEntityEvent& event)
 		}
 		break;
 	}
+}
+
+Cry::Entity::EventFlags CAnimatedCharacter::GetEventMask() const
+{
+	return ENTITY_EVENT_PRE_SERIALIZE | ENTITY_EVENT_ANIM_EVENT | ENTITY_EVENT_XFORM | ENTITY_EVENT_SCRIPT_REQUEST_COLLIDERMODE | ENTITY_EVENT_DONE | ENTITY_EVENT_INIT | ENTITY_EVENT_RESET;
 }
 
 float CAnimatedCharacter::FilterView(SViewParams& viewParams) const
@@ -1656,9 +1674,9 @@ bool CAnimatedCharacter::StartAnimationProcessing(const QuatT& entityLocation) c
 	if ((m_pCharacter != NULL) && (m_lastAnimationUpdateFrameId != currentFrameId))
 	{
 		// calculate the approximate distance from camera
-		CCamera* pCamera = &GetISystem()->GetViewCamera();
-		const float fDistance = ((pCamera ? pCamera->GetPosition() : entityLocation.t) - entityLocation.t).GetLength();
-		const float fZoomFactor = 0.001f + 0.999f * (RAD2DEG((pCamera ? pCamera->GetFov() : 60.0f)) / 60.f);
+		const CCamera& camera = GetISystem()->GetViewCamera();
+		const float fDistance = (camera.GetPosition() - entityLocation.t).GetLength();
+		const float fZoomFactor = 0.001f + 0.999f * (RAD2DEG(camera.GetFov()) / 60.f);
 
 		SAnimationProcessParams params;
 		params.locationAnimation = entityLocation;
@@ -1683,10 +1701,7 @@ void CAnimatedCharacter::SetAnimationPostProcessParameters(const QuatT& entityLo
 {
 	if (m_pCharacter != NULL)
 	{
-		const CCamera& viewCamera = GetISystem()->GetViewCamera();
 		const float scale = GetEntity()->GetWorldTM().GetColumn(0).GetLength();
-		const float fDistance = (viewCamera.GetPosition() - entityLocation.t).GetLength();
-		const float fZoomFactor = 0.001f + 0.999f * (RAD2DEG((viewCamera.GetFov())) / 60.f);
 
 		m_pCharacter->SetAttachmentLocation_DEPRECATED(QuatTS(entityLocation.q, entityLocation.t, scale));
 		if (m_pShadowCharacter)
@@ -1776,7 +1791,7 @@ void CAnimatedCharacter::UpdateGroundAlignment()
 		else
 		{
 			//check if player is close enough
-			CCamera& camera = gEnv->pSystem->GetViewCamera();
+			const CCamera& camera = gEnv->pSystem->GetViewCamera();
 			const float fDistanceSq = (camera.GetPosition() - m_entLocation.t).GetLengthSquared();
 
 			// check if the character is using an animAction

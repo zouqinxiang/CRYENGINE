@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 
@@ -11,19 +11,6 @@ namespace UQS
 
 		//===================================================================================
 		//
-		// - all query factories that the core provides right now
-		// - they need to be defined here as this translation unit is guaranteed to survive even in a .lib (CQueryFactoryBase::RegisterAllInstancesInDatabase() gets called from the central CHub)
-		// - if more query types ever get introduced, then an according factory and specialization for CQueryFactory<>::GetQueryBlueprintType() and
-		//   CQueryFactory<>::CheckOutputTypeCompatibilityAmongChildQueryBlueprints() need to be added
-		//
-		//===================================================================================
-
-		static const CQueryFactory<CQuery_Regular> gs_qf_regularQuery("Regular", true, true, true, 0, 0);
-		static const CQueryFactory<CQuery_Chained> gs_qf_chainedQuery("Chained", false, false, false, 1, IQueryFactory::kUnlimitedChildren);
-		static const CQueryFactory<CQuery_Fallbacks> gs_qf_fallbacksQuery("Fallbacks", false, false, false, 1, IQueryFactory::kUnlimitedChildren);
-
-		//===================================================================================
-		//
 		// specializations for CQueryFactory<>::GetQueryBlueprintType()
 		//
 		//===================================================================================
@@ -33,7 +20,7 @@ namespace UQS
 		const Shared::CTypeInfo& CQueryFactory<CQuery_Regular>::GetQueryBlueprintType(const CQueryBlueprint& queryBlueprint) const
 		{
 			const CGeneratorBlueprint* pGeneratorBlueprint = queryBlueprint.GetGeneratorBlueprint();
-			assert(pGeneratorBlueprint);  // a CQuery_Regular without a generator-blueprint can never ever be valid
+			CRY_ASSERT(pGeneratorBlueprint);  // a CQuery_Regular without a generator-blueprint can never ever be valid
 			return pGeneratorBlueprint->GetTypeOfItemsToGenerate();
 		}
 
@@ -42,7 +29,7 @@ namespace UQS
 		const Shared::CTypeInfo& CQueryFactory<CQuery_Chained>::GetQueryBlueprintType(const CQueryBlueprint& queryBlueprint) const
 		{
 			const size_t childCount = queryBlueprint.GetChildCount();
-			assert(childCount > 0);  // a chained query without children can never ever be valid
+			CRY_ASSERT(childCount > 0);  // a chained query without children can never ever be valid
 			std::shared_ptr<const CQueryBlueprint> pLastChildInChain = queryBlueprint.GetChild(childCount - 1);
 			return pLastChildInChain->GetOutputType();
 		}
@@ -51,7 +38,7 @@ namespace UQS
 		template <>
 		const Shared::CTypeInfo& CQueryFactory<CQuery_Fallbacks>::GetQueryBlueprintType(const CQueryBlueprint& queryBlueprint) const
 		{
-			assert(queryBlueprint.GetChildCount() > 0);  // a fallback query without children can never ever be valid
+			CRY_ASSERT(queryBlueprint.GetChildCount() > 0);  // a fallback query without children can never ever be valid
 			std::shared_ptr<const CQueryBlueprint> pFirstChild = queryBlueprint.GetChild(0);
 			return pFirstChild->GetOutputType();
 		}
@@ -74,7 +61,7 @@ namespace UQS
 		bool CQueryFactory<CQuery_Chained>::CheckOutputTypeCompatibilityAmongChildQueryBlueprints(const CQueryBlueprint& parentQueryBlueprint, string& error, size_t& childIndexCausingTheError) const
 		{
 			const size_t numChildren = parentQueryBlueprint.GetChildCount();
-			assert(numChildren > 0);  // a chained query without children can never ever be valid by the time we reach here
+			CRY_ASSERT(numChildren > 0);  // a chained query without children can never ever be valid by the time we reach here
 
 			for (size_t i = 0; i < numChildren - 1; ++i)
 			{
@@ -111,7 +98,7 @@ namespace UQS
 		bool CQueryFactory<CQuery_Fallbacks>::CheckOutputTypeCompatibilityAmongChildQueryBlueprints(const CQueryBlueprint& parentQueryBlueprint, string& error, size_t& childIndexCausingTheError) const
 		{
 			const size_t numChildren = parentQueryBlueprint.GetChildCount();
-			assert(numChildren > 0);  // a fallback query without children can never ever be valid by the time we reach here
+			CRY_ASSERT(numChildren > 0);  // a fallback query without children can never ever be valid by the time we reach here
 
 			for (size_t i = 0; i < numChildren - 1; ++i)
 			{
@@ -134,47 +121,73 @@ namespace UQS
 
 		//===================================================================================
 		//
-		// specializations for CQueryFactory<>::GetShuttleTypeFromPrecedingSibling()
+		// specializations for CQueryFactory<>::GetShuttleTypeFromPrecedingQuery()
 		//
 		//===================================================================================
 
 		// specialization for CQuery_Regular: according to how GetTypeOfShuttledItemsToExpect() works, this method should never get called at all
 		template <>
-		const Shared::CTypeInfo* CQueryFactory<CQuery_Regular>::GetShuttleTypeFromPrecedingSibling(const CQueryBlueprint& childQueryBlueprint) const
+		const Shared::CTypeInfo* CQueryFactory<CQuery_Regular>::GetShuttleTypeFromPrecedingQuery(const CQueryBlueprint& childQueryBlueprint) const
 		{
-			assert(0);  // we should never get called
+			CRY_ASSERT(0);  // we should never get called
 			return nullptr;
 		}
 
-		// specialization for CQuery_Chained: given the child's query blueprint, this method will inspect its sibling for the type of potentially shuttled items
+		// specialization for CQuery_Chained:
+		// - given the child's query blueprint, this method will inspect its sibling for the type of potentially shuttled items
+		// - if the given child happens to be the first one, then the parent query blueprint will be asked about the shuttle type
 		template <>
-		const Shared::CTypeInfo* CQueryFactory<CQuery_Chained>::GetShuttleTypeFromPrecedingSibling(const CQueryBlueprint& childQueryBlueprint) const
+		const Shared::CTypeInfo* CQueryFactory<CQuery_Chained>::GetShuttleTypeFromPrecedingQuery(const CQueryBlueprint& childQueryBlueprint) const
 		{
-			const CQueryBlueprint* pParentQueryBlueprint = childQueryBlueprint.GetParent();
-			assert(pParentQueryBlueprint);
+			const CQueryBlueprint* pQueryBlueprintOfMyself = childQueryBlueprint.GetParent();
+			CRY_ASSERT(pQueryBlueprintOfMyself);
+			CRY_ASSERT(&pQueryBlueprintOfMyself->GetQueryFactory() == this);
 
-			int childIndex = pParentQueryBlueprint->GetChildIndex(&childQueryBlueprint);
-			assert(childIndex != -1);
+			int childIndex = pQueryBlueprintOfMyself->GetChildIndex(&childQueryBlueprint);
+			CRY_ASSERT(childIndex != -1);
 
-			// if given child query blueprint is the first in the chain, then there cannot be a shuttle type (because there is no preceding query that could have generated items)
+			// If the given query blueprint is the first in the chain, then there is no preceding sibling from which the shuttled items can come, but: 
+			// they could then come from the potential parent (this is how CQuery_Fallbacks and CQuery_Chained handle propagation of their children's result set)
 			if (childIndex == 0)
 			{
-				// first in the chain => no shuttle type possible
-				return nullptr;
+				// first in the chain => there's no preceding sibling, but the shuttle type could come from the potential parent
+				if (const CQueryBlueprint* pParentQueryBlueprint = pQueryBlueprintOfMyself->GetParent())
+				{
+					const CQueryFactoryBase& parentQueryFactory = pParentQueryBlueprint->GetQueryFactory();
+					return parentQueryFactory.GetShuttleTypeFromPrecedingQuery(*pQueryBlueprintOfMyself);
+				}
+				else
+				{
+					return nullptr;
+				}
 			}
 			else
 			{
 				// the preceding one dictates the shuttle type
-				const CQueryBlueprint* pPrecedingQueryBlueprint = pParentQueryBlueprint->GetChild((size_t)childIndex - 1).get();
+				const CQueryBlueprint* pPrecedingQueryBlueprint = pQueryBlueprintOfMyself->GetChild((size_t)childIndex - 1).get();
 				return &pPrecedingQueryBlueprint->GetOutputType();
 			}
 		}
 
-		// specialization for CQuery_Fallbacks: fallback-queries never propagate the resulting items from one child to the next
+		// specialization for CQuery_Fallbacks:
+		// - fallback-queries don't propagate the resulting items from one *child* to its next sibling, but rather propagate
+		//   the shuttled items the *query* received among all children
 		template <>
-		const Shared::CTypeInfo* CQueryFactory<CQuery_Fallbacks>::GetShuttleTypeFromPrecedingSibling(const CQueryBlueprint& childQueryBlueprint) const
+		const Shared::CTypeInfo* CQueryFactory<CQuery_Fallbacks>::GetShuttleTypeFromPrecedingQuery(const CQueryBlueprint& childQueryBlueprint) const
 		{
-			return nullptr;
+			const CQueryBlueprint* pQueryBlueprintOfMyself = childQueryBlueprint.GetParent();
+			CRY_ASSERT(pQueryBlueprintOfMyself);
+			CRY_ASSERT(&pQueryBlueprintOfMyself->GetQueryFactory() == this);
+
+			if (const CQueryBlueprint* pParentQueryBlueprint = pQueryBlueprintOfMyself->GetParent())
+			{
+				const CQueryFactoryBase& parentQueryFactory = pParentQueryBlueprint->GetQueryFactory();
+				return parentQueryFactory.GetShuttleTypeFromPrecedingQuery(*pQueryBlueprintOfMyself);
+			}
+			else
+			{
+				return nullptr;
+			}
 		}
 
 		//===================================================================================
@@ -183,23 +196,33 @@ namespace UQS
 		//
 		//===================================================================================
 
-		CQueryFactoryBase* CQueryFactoryBase::s_pList;
+		const CQueryFactoryBase* CQueryFactoryBase::s_pDefaultQueryFactory;
 
-		CQueryFactoryBase::CQueryFactoryBase(const char* szName, bool bSupportsParameters, bool bRequiresGenerator, bool bSupportsEvaluators, size_t minRequiredChildren, size_t maxAllowedChildren)
-			: m_name(szName)
+		CQueryFactoryBase::CQueryFactoryBase(const char* szName, const CryGUID& guid, const char* szDescription, bool bSupportsParameters, bool bRequiresGenerator, bool bSupportsEvaluators, size_t minRequiredChildren, size_t maxAllowedChildren)
+			: CFactoryBase(szName, guid)
+			, m_description(szDescription)
 			, m_bSupportsParameters(bSupportsParameters)
 			, m_bRequiresGenerator(bRequiresGenerator)
 			, m_bSupportsEvaluators(bSupportsEvaluators)
 			, m_minRequiredChildren(minRequiredChildren)
 			, m_maxAllowedChildren(maxAllowedChildren)
-			, m_pNext(s_pList)
 		{
-			s_pList = this;
+			// nothing
 		}
 
 		const char* CQueryFactoryBase::GetName() const
 		{
-			return m_name.c_str();
+			return CFactoryBase::GetName();
+		}
+
+		const CryGUID& CQueryFactoryBase::GetGUID() const
+		{
+			return CFactoryBase::GetGUID();
+		}
+
+		const char* CQueryFactoryBase::GetDescription() const
+		{
+			return m_description.c_str();
 		}
 
 		bool CQueryFactoryBase::SupportsParameters() const
@@ -236,15 +259,42 @@ namespace UQS
 
 			const CQueryFactoryBase& parentQueryFactory = pParentQueryBlueprint->GetQueryFactory();
 
-			return parentQueryFactory.GetShuttleTypeFromPrecedingSibling(queryBlueprintAskingForThis);
+			return parentQueryFactory.GetShuttleTypeFromPrecedingQuery(queryBlueprintAskingForThis);
 		}
 
-		void CQueryFactoryBase::RegisterAllInstancesInDatabase(QueryFactoryDatabase& databaseToRegisterIn)
+		void CQueryFactoryBase::InstantiateFactories()
 		{
-			for (CQueryFactoryBase* pCurrent = s_pList; pCurrent; pCurrent = pCurrent->m_pNext)
-			{
-				databaseToRegisterIn.RegisterFactory(pCurrent, pCurrent->m_name.c_str());
-			}
+			// - all query factories that the core provides right now
+			// - they need to be defined here as this translation unit is guaranteed to survive even in a .lib
+			// - if more query types ever get introduced, then an according factory and specialization for CQueryFactory<>::GetQueryBlueprintType() and
+			//   CQueryFactory<>::CheckOutputTypeCompatibilityAmongChildQueryBlueprints() need to be added here
+
+			const char* szDescription_regular =
+				"Does the actual work of generating items, evaluating them and returning the best N resulting items.\n"
+				"Cannot have any child queries.";
+
+			const char* szDescription_chained =
+				"Runs one child query after another.\n"
+				"Provides the resulting items of the previous child in the form of 'shuttled items' to the next child.\n"
+				"Needs at least 1 child query.";
+
+			const char* szDescription_fallbacks =
+				"Runs child queries until one comes up with at least one item.\n"
+				"If no child can find an item, then ultimately 0 items will be returned.\n"
+				"All child queries must return the same item type.\n"
+				"Needs at least 1 child query.";
+
+			static const CQueryFactory<CQuery_Regular> queryFactory_regular("Regular", "166b3a88-3cf3-45ea-bb4c-3eb6cb11d6de"_cry_guid, szDescription_regular, true, true, true, 0, 0);
+			static const CQueryFactory<CQuery_Chained> queryFactory_chained("Chained", "89b926fb-a825-4de0-8817-ecef882efc0d"_cry_guid, szDescription_chained, false, false, false, 1, IQueryFactory::kUnlimitedChildren);
+			static const CQueryFactory<CQuery_Fallbacks> queryFactory_fallbacks("Fallbacks", "a5ac314b-29a0-4bd0-82b6-c8ae3752371b"_cry_guid, szDescription_fallbacks, false, false, false, 1, IQueryFactory::kUnlimitedChildren);
+
+			s_pDefaultQueryFactory = &queryFactory_regular;
+		}
+
+		const CQueryFactoryBase& CQueryFactoryBase::GetDefaultQueryFactory()
+		{
+			CRY_ASSERT(s_pDefaultQueryFactory);  // InstantiateFactories() should have been called beforehand
+			return *s_pDefaultQueryFactory;
 		}
 
 	}

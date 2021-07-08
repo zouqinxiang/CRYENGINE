@@ -1,15 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
-
-// -------------------------------------------------------------------------
-//  File name:   SurfaceManager.cpp
-//  Version:     v1.00
-//  Created:     29/9/2004 by Timur.
-//  Compilers:   Visual Studio.NET
-//  Description:
-// -------------------------------------------------------------------------
-//  History:
-//
-////////////////////////////////////////////////////////////////////////////
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "SurfaceTypeManager.h"
@@ -17,6 +6,9 @@
 
 #include <CryScriptSystem/IScriptSystem.h>
 #include <CrySystem/File/ICryPak.h>
+#include <Cry3DEngine/ISurfaceType.h>
+#include <CrySystem/ConsoleRegistration.h>
+
 //////////////////////////////////////////////////////////////////////
 // Construction/Destruction
 //////////////////////////////////////////////////////////////////////
@@ -46,7 +38,7 @@ public:
 		}
 		m_iterator = m_items.begin();
 	}
-	virtual void          Release() { delete this; };
+	virtual void          Release() { delete this; }
 	virtual ISurfaceType* GetFirst()
 	{
 		m_iterator = m_items.begin();
@@ -108,16 +100,16 @@ public:
 	virtual void                        Release()                                  { delete this; }
 	virtual uint16                      GetId() const                              { return m_nId; }
 	virtual const char*                 GetName() const                            { return m_name; }
-	virtual const char*                 GetType() const                            { return m_typename; };
-	virtual int                         GetFlags() const                           { return m_nFlags; };
-	virtual void                        Execute(SSurfaceTypeExecuteParams& params) {};
-	virtual bool                        Load(int nId)                              { m_nId = nId; return true; };
+	virtual const char*                 GetType() const                            { return m_typename; }
+	virtual int                         GetFlags() const                           { return m_nFlags; }
+	virtual void                        Execute(SSurfaceTypeExecuteParams& params) {}
+	virtual bool                        Load(int nId)                              { m_nId = nId; return true; }
 	virtual int                         GetBreakability() const                    { return m_physParams.iBreakability; }
 	virtual int                         GetHitpoints() const                       { return (int)m_physParams.hit_points; }
 	virtual float                       GetBreakEnergy() const                     { return (float)m_physParams.break_energy; }
-	virtual const SSurfaceTypeAIParams* GetAIParams()                              { return m_aiParams; };
-	virtual const SPhysicalParams& GetPhyscalParams()                         { return m_physParams; };
-	virtual SBreakable2DParams*    GetBreakable2DParams()                     { return m_pBreakable2DParams; };
+	virtual const SSurfaceTypeAIParams* GetAIParams()                              { return m_aiParams; }
+	virtual const SPhysicalParams& GetPhyscalParams()                         { return m_physParams; }
+	virtual SBreakable2DParams*    GetBreakable2DParams()                     { return m_pBreakable2DParams; }
 	virtual SBreakageParticles*    GetBreakageParticles(const char* sType, bool bLookInDefault = true);
 	//////////////////////////////////////////////////////////////////////////
 };
@@ -406,6 +398,9 @@ void CSurfaceTypeManager::LoadSurfaceTypes()
 		}
 
 		int bManuallyBreakable = 0;
+		// The "important" value indicates if this surface has a high or low priority (default is high priority)
+		// Particles can do a ray world intersection based on priority
+		int important = sf_important;
 		bool bNoCollide = false;
 		bool vehicle_only_collisions = false;
 		bool nBreakable2d = 0;
@@ -453,6 +448,7 @@ void CSurfaceTypeManager::LoadSurfaceTypes()
 			physNode->getAttr("vehicle_only_collisions", vehicle_only_collisions);
 			physNode->getAttr("can_shatter", can_shatter);
 			physNode->getAttr("sound_obstruction", physParams.sound_obstruction);
+			physNode->getAttr("important", important);
 
 			string collTypeStr = physNode->getAttr("coll_types");
 			if (collTypeStr.length())
@@ -497,6 +493,10 @@ void CSurfaceTypeManager::LoadSurfaceTypes()
 				physParams.iBreakability = nBreakable2d ? 1 : 2;
 				bManuallyBreakable = sf_manually_breakable;
 			}
+			if (important != 0)
+			{
+				important = sf_important;
+			}
 
 			if (bNoCollide)
 				pSurfaceType->m_nFlags |= SURFACE_TYPE_NO_COLLIDE;
@@ -509,7 +509,7 @@ void CSurfaceTypeManager::LoadSurfaceTypes()
 			{
 				gEnv->pPhysicalWorld->SetSurfaceParameters(pSurfaceType->GetId(), physParams.bouncyness, physParams.friction, physParams.damage_reduction,
 				                                           physParams.ric_angle, physParams.ric_dam_reduction, physParams.ric_vel_reduction,
-				                                           sf_pierceability(physParams.pierceability) | sf_matbreakable(physParams.breakable_id) | bManuallyBreakable);
+				                                           sf_pierceability(physParams.pierceability) | sf_matbreakable(physParams.breakable_id) | bManuallyBreakable | important);
 			}
 		}
 

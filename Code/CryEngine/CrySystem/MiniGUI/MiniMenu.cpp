@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 // -------------------------------------------------------------------------
 //  File name:   MiniMenu.cpp
@@ -10,6 +10,7 @@
 ////////////////////////////////////////////////////////////////////////////
 
 #include <StdAfx.h>
+#include <CryMath/Cry_Math.h>
 #include "MiniMenu.h"
 #include "DrawContext.h"
 
@@ -111,6 +112,8 @@ void CMiniMenu::OnEvent(float x, float y, EMiniCtrlEvent event)
 			}
 		}
 		break;
+	default:
+		break;
 	}
 }
 
@@ -202,6 +205,9 @@ CMiniMenu* CMiniMenu::UpdateSelection(EMiniCtrlEvent event)
 				OnEvent(0, 0, eCtrlEvent_LButtonDown);
 			}
 		}
+		break;
+
+	default:
 		break;
 	}
 

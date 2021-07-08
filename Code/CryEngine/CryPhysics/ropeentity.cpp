@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 
@@ -202,9 +202,6 @@ int CRopeEntity::SetParams(pe_params *_params, int bThreadSafe)
 	if (req.IsQueued())
 		return 1;
 
-#ifdef SEG_WORLD
-	bool bRecalcBBox = false;
-#endif
 	int res;
 	unsigned int flags0 = m_flags;
 	Vec3 prevpos = m_pos;
@@ -633,7 +630,7 @@ void CRopeEntity::EnforceConstraints(float seglen, const quaternionf& qtv,const 
 			}
 		}
 	} else if (m_nAttach || m_nSegs && (!(m_flags & rope_subdivide_segs) || m_maxIters<sqr(m_nSegs)*10 && !m_bStrained && m_length>0)) {
-		Vec3 dir,ptend[2] = { m_segs[0].pt,m_segs[m_nSegs].pt };
+		Vec3 dir;
 		float diff,len2,seglen2=sqr(seglen),rseglen=1.0f/max(1e-10f,seglen),rseglen2=sqr(rseglen),k;
 		m_segs[0].kdP=m_segs[m_nSegs].kdP = 0;
 		if (m_flags & rope_subdivide_segs && m_vtx) {
@@ -1560,7 +1557,7 @@ float CRopeEntity::Solver(float time_interval, float seglen)
 		Ebefore += m_segs[i].vel.len2();
 
 	if (m_bHasContacts+m_nAttach || m_flags & rope_subdivide_segs) {
-		FRAME_PROFILER( "Rope solver MC",GetISystem(),PROFILE_PHYSICS );
+		CRY_PROFILE_SECTION(PROFILE_PHYSICS, "Rope solver MC");
 		int bBounced; iter=m_maxIters;
 		float vrel,vreq,dPtang;
 		Vec3 dp;
@@ -1657,7 +1654,7 @@ float CRopeEntity::Solver(float time_interval, float seglen)
 				m_segs[i].vel = m_vtx[m_segs[i].iVtx0].vel;
 		}
 	}	else {
-		FRAME_PROFILER( "Rope solver CG",GetISystem(),PROFILE_PHYSICS );
+		CRY_PROFILE_SECTION(PROFILE_PHYSICS, "Rope solver CG");
 		m_segs[0].vcontact.x = 0;
 		m_segs[0].vcontact.y = m_segs[1].dir*m_segs[0].dir;
 		m_segs[0].vcontact.z = (m_segs[0].vel-m_segs[1].vel)*m_segs[0].dir;
@@ -1913,10 +1910,10 @@ int CRopeEntity::Step(float time_interval)
 {
 	if (m_nSegs<=0 || !m_bAwake)
 		return 1;
-	FUNCTION_PROFILER( GetISystem(),PROFILE_PHYSICS );
-	PHYS_ENTITY_PROFILER
+	CRY_PROFILE_FUNCTION(PROFILE_PHYSICS );
 	
-	float seglen=m_length/m_nSegs,seglen2=sqr(seglen), rseglen=m_nSegs/max(1e-6f,m_length),rseglen2=sqr(rseglen),scale; 
+	int iCaller = get_iCaller_int();
+	float seglen=m_length/m_nSegs, rseglen=m_nSegs/max(1e-6f,m_length),scale; 
 	int i,j,k,iDir,iEnd,iter,bTargetPoseActive=m_bTargetPoseActive,bGridLocked=0,bHasContacts=0,nCheckParts=0;
 	int collTypes = m_collTypes;
 	Vec3 pos,gravity,dir,ptend[2],sz,BBox[2],ptnew,dv,dw,vrel,dir0,offstv(ZERO),collBBox[2];
@@ -1963,6 +1960,8 @@ int CRopeEntity::Step(float time_interval)
 		time_interval = max(0.001f, min(m_timeStepFull-m_timeStepPerformed, time_interval));
 	else
 		return 1;
+
+	PHYS_ENTITY_PROFILER
 
 	m_timeStepPerformed += time_interval;
 	m_lastTimeStep = time_interval;
@@ -2116,7 +2115,7 @@ int CRopeEntity::Step(float time_interval)
 				m_segs[i].pt0 = m_segs[i].pt;
 			m_pWorld->UnlockGrid(this,-bGridLocked);
 		}
-		InitEvent(&event,this);
+		InitEvent(&event,this,iCaller);
 		event.pos = m_pos;
 		m_pWorld->OnEvent(m_flags,&event);
 		return 1;
@@ -2143,8 +2142,8 @@ int CRopeEntity::Step(float time_interval)
 	collBBox[0]=BBox[0]; collBBox[1]=BBox[1];
 
 	if (collTypes & ent_all | m_flags & rope_collides_with_attachment) {
-		FRAME_PROFILER( "Rope collision",GetISystem(),PROFILE_PHYSICS );
-		int iCaller = get_iCaller_int(), objtypes;
+		CRY_PROFILE_SECTION(PROFILE_PHYSICS, "Rope collision");
+		int objtypes;
 		CPhysicalEntity **pentlist,*pentbuf[2];
 		int iseg,nEnts,iend,ippbv=0,nPrecompPartBVs=0;
 		box boxrope,boxpart;
@@ -2369,7 +2368,7 @@ int CRopeEntity::Step(float time_interval)
 		}
 		m_pWorld->UnlockGrid(this,-bGridLocked);
 	}
-	InitEvent(&event,this);
+	InitEvent(&event,this,iCaller);
 	event.pos = m_pos;
 	m_pWorld->OnEvent(m_flags,&event);
 
@@ -2581,7 +2580,7 @@ int CRopeEntity::Update(float time_interval, float damping)
 	return 1;
 }
 
-static geom_contact g_RopeContact[MAX_PHYS_THREADS+1];
+static geom_contact g_RopeContact[MAX_TOT_THREADS];
 
 int CRopeEntity::RayTrace(SRayTraceRes& rtr)
 {
@@ -2626,16 +2625,19 @@ int CRopeEntity::RayTrace(SRayTraceRes& rtr)
 
 void CRopeEntity::ApplyVolumetricPressure(const Vec3 &epicenter, float kr, float rmin)
 {
-	if (m_nSegs>0 && m_maxForce>0 && m_pTiedTo[0] && m_pTiedTo[1]) {
+	if (m_nSegs>0) {
 		int i;
-		float dP;
+		float dP,kseg=kr*m_length*m_collDist*2,minv=1/max(1e-6f,m_mass);
 		Vec3 r;
 		int bThreadSafe = -(get_iCaller()-MAX_PHYS_THREADS>>31);
 		for(i=0,dP=0; i<m_nSegs; i++) {
 			r = (m_segs[i].pt+m_segs[i+1].pt)*0.5f-epicenter;
-			dP += (m_segs[i].dir^r).len()/(r.len()*max(r.len2(),rmin*rmin));
+			float dPseg = kseg*(m_segs[i].dir^r).len()/(r.len()*max(r.len2(),rmin*rmin));
+			if (!m_bStrained)
+				m_segs[i].vel += r.GetNormalizedFast()*min(20.0f,dPseg*minv);
+			dP += dPseg;
 		}
-		if (dP*kr*m_length*m_collDist*2 > m_maxForce*0.01f) {
+		if (m_maxForce>0 && m_pTiedTo[0] && m_pTiedTo[1] && dP > m_maxForce*0.01f) {
 			EventPhysJointBroken epjb;
 			epjb.idJoint=0; epjb.bJoint=0; MARK_UNUSED epjb.pNewEntity[0],epjb.pNewEntity[1];
 			epjb.pEntity[0]=epjb.pEntity[1]=this; epjb.pForeignData[0]=epjb.pForeignData[1]=m_pForeignData; 
@@ -2760,16 +2762,14 @@ int CRopeEntity::GetStateSnapshot(TSerialize ser, float time_back, int flags)
 		ser.Value("pos_start", m_segs[0].pt);
 		ser.Value("pos_end", m_segs[m_nSegs].pt);
 	} else {
-		ser.Value("strained", 0);
+		ser.Value("strained", bAwake = false);
 		ser.Value("awake", bAwake = m_bAwake!=0);
 
 		ser.BeginGroup("Segs");
 		for(i=0;i<=m_nSegs;i++) {
 			ser.Value(numbered_tag("pos",i), m_segs[i].pt);
 			if (m_bAwake)
-			{
 				ser.Value(numbered_tag("vel",i), m_segs[i].vel);
-			}
 		}
 		ser.EndGroup();
 
@@ -2780,9 +2780,7 @@ int CRopeEntity::GetStateSnapshot(TSerialize ser, float time_back, int flags)
 			for(i=0;i<m_nVtx;i++) {
 				ser.Value(numbered_tag("pos",i), m_vtx[i].pt);
 				if (m_bAwake)
-				{
 					ser.Value(numbered_tag("vel",i), m_vtx[i].vel);
-				}
 			}
 			ser.EndGroup();
 		}
@@ -2796,8 +2794,7 @@ int CRopeEntity::GetStateSnapshot(TSerialize ser, float time_back, int flags)
 			m_pTiedTo[1] && m_pTiedTo[1]->m_iSimClass<3 && (!m_pForeignData || m_pForeignData!=m_pTiedTo[1]->m_pForeignData)))
 	{
 		ser.Value("saveties", bAwake=true);
-		for(i=0;i<2;i++) 
-		{
+		for(i=0;i<2;i++) {
 			ser.BeginGroup("link");
 			if (m_pTiedTo[i]) {
 				ser.Value("tied", bAwake=true);
@@ -2989,10 +2986,17 @@ void CRopeEntity::DrawHelperInformation(IPhysRenderer *pRenderer, int flags)
 
 void CRopeEntity::GetMemoryStatistics(ICrySizer *pSizer) const
 {
-	CPhysicalEntity::GetMemoryStatistics(pSizer);
 	if (GetType()==PE_ROPE)
 		pSizer->AddObject(this, sizeof(CRopeEntity));
-	pSizer->AddObject(m_segs, m_nSegs*sizeof(m_segs[0]));
+	CPhysicalEntity::GetMemoryStatistics(pSizer);
+	pSizer->AddObject(m_segs, (m_nSegs+1)*sizeof(m_segs[0]));
+	pSizer->AddObject(m_vtx, m_nVtxAlloc*sizeof(m_vtx[0]));
+	pSizer->AddObject(m_vtx1, m_nVtxAlloc*sizeof(m_vtx1[0]));
+	if (m_vtxSolver)
+		pSizer->AddObject(m_vtxSolver, m_nVtxAlloc*sizeof(m_vtxSolver[0]));
+	if (m_idx)
+		pSizer->AddObject(m_idx, (m_nMaxSubVtx+2)*sizeof(m_idx[0]));
+	pSizer->AddObject(m_attach, m_nAttach*sizeof(m_attach[0]));
 }
 
 int CRopeEntity::GetVertices(strided_pointer<Vec3>& vtx) const
@@ -3024,32 +3028,31 @@ float CRopeEntity::GetExtent(EGeomForm eForm)	const
 	return ext.TotalExtent();
 }
 
-void CRopeEntity::GetRandomPos(PosNorm& ran, CRndGen& seed, EGeomForm eForm) const
+void CRopeEntity::GetRandomPoints(Array<PosNorm> points, CRndGen& seed, EGeomForm eForm) const
 {
+	if (eForm != GeomForm_Vertices && !m_Extents[GeomForm_Edges].NumParts())
+		return points.fill(ZERO);
+
 	strided_pointer<Vec3> vtx;
 	int nVerts = GetVertices(vtx);
-	int i;
-	Vec3 dir;
 
-	if (eForm == GeomForm_Vertices)
-	{
-		i = seed.GetRandom(0, nVerts - 1);
-		ran.vPos = vtx[i];
-		dir = (vtx[min(i+1,nVerts-1)] - vtx[max(i-1,0)]).normalized();
-	}
-	else
-	{
-		CGeomExtent const& ext = m_Extents[GeomForm_Edges];
-		if (!ext.NumParts())
-			return ran.zero();
-		i = ext.RandomPart(seed);
-		ran.vPos = vtx[i]+(vtx[i+1]-vtx[i])*seed.GetRandom(0.0f, 1.0f);
-		dir = (vtx[i+1]-vtx[i]).normalized();
-	}
+	for (auto& ran : points) {
+		Vec3 dir;
+		if (eForm == GeomForm_Vertices) {
+			int i = seed.GetRandom(0, nVerts - 1);
+			ran.vPos = vtx[i];
+			dir = (vtx[min(i+1,nVerts-1)] - vtx[max(i-1,0)]).normalized();
+		}
+		else {
+			int i = m_Extents[GeomForm_Edges].RandomPart(seed);
+			ran.vPos = vtx[i]+(vtx[i+1]-vtx[i])*seed.GetRandom(0.0f, 1.0f);
+			dir = (vtx[i+1]-vtx[i]).normalized();
+		}
 
-	Vec3 axisx = dir.GetOrthogonal().normalized(), axisy = dir^axisx;
-	float angle = seed.GetRandom(0.0f, 2.0f*gf_PI);
-	ran.vNorm = axisx*cos_tpl(angle)+axisy*sin_tpl(angle);
+		Vec3 axisx = dir.GetOrthogonal().normalized(), axisy = dir^axisx;
+		float angle = seed.GetRandom(0.0f, 2.0f*gf_PI);
+		ran.vNorm = axisx*cos_tpl(angle)+axisy*sin_tpl(angle);
+	}
 }
 
 #undef m_bAwake

@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
 -------------------------------------------------------------------------
@@ -49,7 +49,7 @@ public:
 
 	bool Init(CFireMode* pFiremode, IFireModePluginParams* pPluginParams)
 	{
-		CRY_ASSERT_MESSAGE(pFiremode, "NULL firemode passed to plugin, not possible!");
+		CRY_ASSERT(pFiremode, "NULL firemode passed to plugin, not possible!");
 		m_pOwnerFiremode = pFiremode;
 
 		if(pPluginParams && pPluginParams->GetPluginType() == GetRunTimeType())
@@ -58,7 +58,7 @@ public:
 		}
 		else
 		{
-			CRY_ASSERT_MESSAGE(0, "Incorrect or NULL parameters for plugin");
+			CRY_ASSERT(0, "Incorrect or NULL parameters for plugin");
 			return false;
 		}
 

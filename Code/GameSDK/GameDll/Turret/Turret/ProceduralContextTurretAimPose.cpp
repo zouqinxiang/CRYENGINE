@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "ProceduralContextTurretAimPose.h"
@@ -171,8 +171,6 @@ void CProceduralContextTurretAimPose::UpdateSmoothedTargetWorldPosition( const f
 	const QuatT originJointLocation = m_pSkeletonPose->GetAbsJointByID( originJointId );
 
 	const Matrix34& worldTM = m_entity->GetWorldTM();
-
-	const Vec3 oldTargetLocalPosition = m_invertedWorldTM * m_smoothedTargetWorldPosition;
 
 	const float oldYawRadians = m_yawRadians;
 	const float oldPitchRadians = m_pitchRadians;

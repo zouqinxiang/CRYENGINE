@@ -1,21 +1,10 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
-/*************************************************************************
-   -------------------------------------------------------------------------
-   $Id$
-   $DateTime$
-
-   -------------------------------------------------------------------------
-   History:
-   - 3:8:2004   11:26 : Created by Márcio Martins
-   - 17:8:2005        : Modified - NickH: Factory registration moved to GameFactory.cpp
-
-*************************************************************************/
 #include "StdAfx.h"
 #include "Game.h"
 #include "GameCVars.h"
 #include "GameActions.h"
-
+ 
 #include "UI/UIManager.h"
 #include "UI/ProfileOptions.h"
 #include "UI/WarningsManager.h"
@@ -38,7 +27,7 @@
 #include "ItemScheduler.h"
 #include "Utility/CryWatch.h"
 
-#include <CryExtension/ICryPluginManager.h>
+#include <CrySystem/ICryPluginManager.h>
 #include <CrySystem/File/ICryPak.h>
 #include <CryString/CryPath.h>
 #include <IActionMapManager.h>
@@ -51,8 +40,10 @@
 #include <CryLobby/ICryLobbyUI.h>
 #include <CrySystem/ILocalizationManager.h>
 #include <CrySystem/File/IResourceManager.h>
+#include <CrySystem/CryVersion.h>
 #include <CryAction/ICustomActions.h>
 #include <CryFlowGraph/IFlowBaseNode.h>
+#include <CrySystem/ConsoleRegistration.h>
 
 #include "ScriptBind_Actor.h"
 #include "ScriptBind_Item.h"
@@ -62,8 +53,12 @@
 #include "ScriptBind_HitDeathReactions.h"
 #include "Boids/ScriptBind_Boids.h"
 #include "AI/ScriptBind_GameAI.h"
+#include "DialogSystem/ScriptBind_DialogSystem.h"
+#include "DialogSystem/DialogSystem.h"
+#include "SubtitleManager.h"
 #include "UI/HUD/ScriptBind_HUD.h"
 #include "Environment/ScriptBind_InteractiveObject.h"
+#include "Network/Lobby/MatchMakingTelemetry.h"
 #include "Network/Lobby/ScriptBind_MatchMaking.h"
 #include "Turret/Turret/ScriptBind_Turret.h"
 #include "ScriptBind_ProtectedBinds.h"
@@ -106,6 +101,12 @@
 #include "AI/TacticalPointLanguageExtender.h"
 #include "AI/GameAISystem.h"
 #include "AI/AICorpse.h"
+
+#include "AI/Action/AIProxyManager.h"
+#include "AI/Action/AIHandler.h"
+#include "AI/Action/AIProxy.h"
+#include "AI/Action/RangeSignalingSystem/RangeSignaling.h"
+#include "AI/Action/SignalTimers/SignalTimers.h"
 
 #include "Network/Lobby/GameUserPackets.h"
 #include "Network/Lobby/GameAchievements.h"
@@ -173,7 +174,6 @@
 #include <CryGame/IGameVolumes.h>
 
 #include <CryLiveCreate/ILiveCreateHost.h>
-#include <CryCore/SFunctor.h>
 
 #include "WorldBuilder.h"
 
@@ -181,11 +181,9 @@
 #include "DynamicResponseSystem/ConditionDistanceToEntity.h"
 #include "DynamicResponseSystem/GameTokenToDrsTranslator.h"
 #include "DynamicResponseSystem/ActionExecuteAudioTrigger.h"
-#include "DynamicResponseSystem/ActionSpeakLineBasedOnVariable.h"
 #include <CrySerialization/ClassFactory.h>
 
-#include <CrySystem/Profilers/FrameProfiler/FrameProfiler.h>
-#include <CrySystem/CryUnitTest.h>
+#include <CrySystem/Testing/CryTest.h>
 
 #include <IPerceptionManager.h>
 
@@ -364,8 +362,8 @@ public:
 
 		if (3000 < nDrawCalls)
 		{
-			gEnv->pRenderer->SetColorOp(eCO_MODULATE, eCO_MODULATE, DEF_TEXARG0, DEF_TEXARG0);
-			gEnv->pRenderer->SetState(GS_BLSRC_SRCALPHA | GS_BLDST_ONEMINUSSRCALPHA | GS_NODEPTHTEST);
+			//gEnv->pRenderer->SetColorOp(eCO_MODULATE, eCO_MODULATE, DEF_TEXARG0, DEF_TEXARG0);
+			//gEnv->pRenderer->SetState(GS_BLSRC_SRCALPHA | GS_BLDST_ONEMINUSSRCALPHA | GS_NODEPTHTEST);
 
 			float alpha = max(0.0f, min(1.0f, (nDrawCalls - 3000) / 2000.0f));
 			float reddy = max(0.0f, min(1.0f, (nDrawCalls - 4000) / 3000.0f));
@@ -409,8 +407,8 @@ public:
 			//x = w * 0.25f - m_Textures[0]->GetWidth() * scalef * 0.5f;
 			//y = h * 0.5f - m_Textures[0]->GetHeight() * scalef * 0.5f;
 
-			gEnv->pRenderer->Draw2dImage(0.f, 200.f, m_Textures[0]->GetWidth() * scalef, m_Textures[0]->GetHeight() * scalef, m_Textures[0]->GetTextureID(), 0.0f, 0.0f, 1.0f, 1.0f, 180.0f, 1.0f, 1.0f - m_DrawCallData.redValue, 1.0f - m_DrawCallData.redValue, m_DrawCallData.lastAlpha, 0.9f);
-			gEnv->pRenderer->Draw2dImage(0.f, 200.f, m_Textures[1]->GetWidth() * scalef, m_Textures[1]->GetHeight() * scalef, m_Textures[1]->GetTextureID(), 0.0f, 0.0f, 1.0f, 1.0f, 180.0f, 1.0f, 1.0f, 1.0f, m_DrawCallData.redValue, 1.0f);
+			IRenderAuxImage::Draw2dImage(0.f, 200.f, m_Textures[0]->GetWidth() * scalef, m_Textures[0]->GetHeight() * scalef, m_Textures[0]->GetTextureID(), 0.0f, 0.0f, 1.0f, 1.0f, 180.0f, 1.0f, 1.0f - m_DrawCallData.redValue, 1.0f - m_DrawCallData.redValue, m_DrawCallData.lastAlpha, 0.9f);
+			IRenderAuxImage::Draw2dImage(0.f, 200.f, m_Textures[1]->GetWidth() * scalef, m_Textures[1]->GetHeight() * scalef, m_Textures[1]->GetTextureID(), 0.0f, 0.0f, 1.0f, 1.0f, 180.0f, 1.0f, 1.0f, 1.0f, m_DrawCallData.redValue, 1.0f);
 		}
 		else
 		{
@@ -430,6 +428,7 @@ CGame::CGame()
 	m_pScriptBindHitDeathReactions(0),
 	m_pScriptBindBoids(0),
 	m_pScriptBindTurret(0),
+	m_pScriptBindDialogSystem(nullptr),
 	m_pPlayerProfileManager(0),
 	m_pGameAudio(0),
 	m_pScreenEffects(0),
@@ -447,6 +446,7 @@ CGame::CGame()
 	m_pMatchMakingTelemetry(NULL),
 	m_pDataPatchDownloader(0),
 	m_pGameLocalizationManager(0),
+	m_pGameStateRecorder(0),
 #if USE_LAGOMETER
 	m_pLagOMeter(0),
 #endif
@@ -520,7 +520,9 @@ CGame::CGame()
 	m_userChangedDoSignOutAndIn(false),
 #endif
 	m_pMovingPlatformMgr(NULL),
-	m_stereoOutputFunctorId(0)
+	m_stereoOutputFunctorId(0),
+	m_pDialogSystem(nullptr),
+	m_pSubtitleManager(nullptr)
 {
 	static_assert(eCGE_Last <= 64, "Unexpected enum value!");
 
@@ -535,16 +537,13 @@ CGame::CGame()
 	m_inDevMode = false;
 	m_userProfileChanged = true;
 	m_bLastSaveDirty = true;
-	m_editorDisplayHelpers = true;
 	m_RenderingToHMD = false;
 
 	ICVar* pStereoOutput(gEnv->pConsole->GetCVar("r_StereoOutput"));
 	if (pStereoOutput)
 	{
 		SetRenderingToHMD(pStereoOutput->GetIVal() == 7);// 7 means HMD.
-		SFunctor oFunctor;
-		oFunctor.Set(OnChangedStereoRenderDevice, pStereoOutput);
-		m_stereoOutputFunctorId = pStereoOutput->AddOnChangeFunctor(oFunctor);
+		m_stereoOutputFunctorId = pStereoOutput->AddOnChange(OnChangedStereoRenderDevice);
 	}
 	else
 	{
@@ -595,7 +594,12 @@ CGame::~CGame()
 
 	gEnv->pGameFramework->EndGameContext();
 	gEnv->pGameFramework->UnregisterListener(this);
-	GetISystem()->GetPlatformOS()->RemoveListener(this);
+
+	if (IPlatformOS* pPlatformOS = GetISystem()->GetPlatformOS())
+	{
+		pPlatformOS->RemoveListener(this);
+	}
+
 	gEnv->pSystem->GetISystemEventDispatcher()->RemoveListener(this);
 	ReleaseScriptBinds();
 
@@ -641,6 +645,7 @@ CGame::~CGame()
 	SAFE_DELETE(m_patchPakManager);
 	SAFE_DELETE(m_pDataPatchDownloader);
 	SAFE_DELETE(m_pGameLocalizationManager);
+	SAFE_RELEASE(m_pGameStateRecorder);
 	SAFE_DELETE(m_pGameTokenSignalCreator);
 #if USE_LAGOMETER
 	SAFE_DELETE(m_pLagOMeter);
@@ -671,6 +676,8 @@ CGame::~CGame()
 	SAFE_DELETE(m_pMovingPlatformMgr);
 	SAFE_DELETE(m_pMatchMakingTelemetry);
 	SAFE_DELETE(m_pWorldBuilder);
+	SAFE_DELETE(m_pDialogSystem);
+	SAFE_DELETE(m_pSubtitleManager);
 
 	if (m_pLobbySessionHandler != NULL)
 	{
@@ -705,8 +712,6 @@ CGame::~CGame()
 		}
 	}
 
-	gEnv->pSystem->UnloadEngineModule("CryLobby");
-
 	GAME_FX_SYSTEM.Destroy();
 
 	ScreenResolution::ReleaseScreenResolutions();
@@ -732,6 +737,17 @@ CGame::~CGame()
 	g_pGame = 0;
 	g_pGameCVars = 0;
 	g_pGameActions = 0;
+
+	if (m_maxPlayerCallbackIndex != -1)
+	{
+		if (ICVar* pMaxPlayers = gEnv->pConsole->GetCVar("sv_maxplayers"))
+			pMaxPlayers->RemoveOnChangeFunctor(m_maxPlayerCallbackIndex);
+	}
+	if (m_migrationTimeoutCallbackIndex != -1)
+	{
+		if (ICVar* pTimeoutCVar = gEnv->pConsole->GetCVar("net_migrate_timeout"))
+			pTimeoutCVar->RemoveOnChangeFunctor(m_migrationTimeoutCallbackIndex);
+	}
 }
 
 #define EngineStartProfiler(x)
@@ -746,7 +762,7 @@ static inline void InlineInitializationProcessing(const char* sDescription)
 
 bool CGame::Init(/*IGameFramework* pFramework*/)
 {
-	LOADING_TIME_PROFILE_SECTION(GetISystem());
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
 
 	InlineInitializationProcessing("CGame::Init");
 #ifdef GAME_DEBUG_MEM
@@ -786,6 +802,11 @@ bool CGame::Init(/*IGameFramework* pFramework*/)
 
 	GetISystem()->GetPlatformOS()->AddListener(this, "CGame");
 	gEnv->pSystem->GetISystemEventDispatcher()->RegisterListener(this, "CGame");
+
+	m_pDialogSystem = new CDialogSystem();
+	gEnv->pSystem->SetIDialogSystem(m_pDialogSystem);
+
+	m_pSubtitleManager = new CSubtitleManager();
 
 	InitScriptBinds();
 
@@ -861,10 +882,9 @@ bool CGame::Init(/*IGameFramework* pFramework*/)
 
 		if (gEnv->IsDedicated())
 		{
-			const char* const DEDICATED_BASE_CONFIG_NAME = "dedicated";
-			string path = gEnv->pSystem->GetRootFolder();
+			const char* const szDedicatedBaseConfigName = "dedicated.cfg";
+			const string configFileName = PathUtil::Make(gEnv->pSystem->GetRootFolder(), szDedicatedBaseConfigName);
 
-			configFileName.Format("%s%s.cfg", path.c_str(), DEDICATED_BASE_CONFIG_NAME);
 			CryLog("[dedicated] loading dedicated config %s", configFileName.c_str());
 
 			SDedicatedConfigSink sink;
@@ -926,12 +946,7 @@ bool CGame::Init(/*IGameFramework* pFramework*/)
 		}
 #endif
 
-		if (!gEnv->pSystem->InitializeEngineModule("CryLobby", cryiidof<ILobbyEngineModule>(), false))
-		{
-			CryWarning(VALIDATOR_MODULE_GAME, VALIDATOR_ERROR, "Error creating Lobby System!");
-		}
-
-		auto pLobby = gEnv->pNetwork->GetLobby();
+		ICryLobby* pLobby = gEnv->pNetwork->GetLobby();
 		if (pLobby)
 		{
 			pLobby->SetUserPacketEnd(eGUPD_End);
@@ -940,7 +955,7 @@ bool CGame::Init(/*IGameFramework* pFramework*/)
 			if (!(g_pGameCVars && (g_pGameCVars->g_useOnlineServiceForDedicated) && gEnv->IsDedicated()))
 			{
 				error = pLobby->Initialise(eCLS_LAN, features, CGameBrowser::ConfigurationCallback, CGameBrowser::InitialiseCallback, this);
-				CRY_ASSERT_MESSAGE(error == eCLE_Success, "Failed to initialize LAN lobby service");
+				CRY_ASSERT(error == eCLE_Success, "Failed to initialize LAN lobby service");
 			}
 #endif // #if !defined(_RELEASE) || defined(PERFORMANCE_BUILD)
 
@@ -953,7 +968,7 @@ bool CGame::Init(/*IGameFramework* pFramework*/)
 				CryLog("Online lobby currently not supported for dedicated sever. Not initialized");
 			}
 
-			//CRY_ASSERT_MESSAGE( error == eCLE_Success, "Failed to initialize online lobby service" );
+			//CRY_ASSERT( error == eCLE_Success, "Failed to initialize online lobby service" );
 			CryWarning(VALIDATOR_MODULE_GAME, VALIDATOR_COMMENT, "Online Lobby not supported in the default SDK.");
 			m_pSquadManager = new CSquadManager();    // MUST be done before game browser is constructed
 
@@ -962,7 +977,7 @@ bool CGame::Init(/*IGameFramework* pFramework*/)
 			//Set the matchmaking version based on the build version if g_matchmakingversion is a default value
 			if (!gEnv->IsEditor() && g_pGameCVars->g_MatchmakingVersion <= 1)
 			{
-				const int internalBuildVersion = gEnv->pSystem->GetBuildVersion().v[0];
+				const int internalBuildVersion = gEnv->pSystem->GetBuildVersion()[0];
 				CryLog("BuildVersion %d", internalBuildVersion);
 				if (internalBuildVersion != 1)
 				{
@@ -974,12 +989,6 @@ bool CGame::Init(/*IGameFramework* pFramework*/)
 
 			m_pGameLobbyManager = new CGameLobbyManager();
 		}
-	}
-
-	//perception system plugin must be loaded here by default (cryplugin.csv cannot be used because GameSDK doesn't exist as cry project yet)
-	if (!gEnv->pSystem->GetIPluginManager()->LoadPluginFromDisk(ICryPluginManager::EPluginType::Native, "CryPerceptionSystem"))
-	{
-		CryWarning(VALIDATOR_MODULE_GAME, VALIDATOR_ERROR, "Error loading Perception System!");
 	}
 
 	m_pGameAchievements = new CGameAchievements;  //Should be after GameLobbyManager
@@ -1044,7 +1053,7 @@ bool CGame::Init(/*IGameFramework* pFramework*/)
 	ICVar* pMaxPlayers = gEnv->pConsole->GetCVar("sv_maxplayers");
 	if (pMaxPlayers)
 	{
-		pMaxPlayers->SetOnChangeCallback(VerifyMaxPlayers); // this needs to be set 1st, if MAX_PLAYER_LIMIT is greater than 32 we'll clamp it otherwise
+		m_maxPlayerCallbackIndex = pMaxPlayers->AddOnChange(VerifyMaxPlayers); // this needs to be set 1st, if MAX_PLAYER_LIMIT is greater than 32 we'll clamp it otherwise
 		pMaxPlayers->Set(MAX_PLAYER_LIMIT);
 	}
 
@@ -1235,7 +1244,6 @@ bool CGame::Init(/*IGameFramework* pFramework*/)
 		REGISTER_DRS_CUSTOM_ACTION(CActionExecuteAudioTrigger);
 		REGISTER_DRS_CUSTOM_ACTION(CActionSetAudioSwitch);
 		REGISTER_DRS_CUSTOM_ACTION(CActionSetAudioParameter);
-		REGISTER_DRS_CUSTOM_ACTION(CActionSpeakLineBasedOnVariable);
 		REGISTER_DRS_CUSTOM_CONDITION(CConditionDistanceToEntity);
 
 		// create a special DrsActor that sends out our automatic signals every time a gametoken changes its value
@@ -1266,6 +1274,11 @@ bool CGame::CompleteInit()
 #ifdef GAME_DEBUG_MEM
 	DumpMemInfo("CGame::CompleteInit");
 #endif
+
+	if (m_pGameAISystem)
+	{
+		m_pGameAISystem->CompleteInit();
+	}
 
 	return true;
 }
@@ -1315,13 +1328,18 @@ void CGame::InitGameType(bool multiplayer, bool fromInit /*= false*/)
 	}
 #endif
 
-	MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, 0, "CGame::InitGameType");
+	MEMSTAT_CONTEXT(EMemStatContextType::Other, "CGame::InitGameType");
 
 	SAFE_DELETE(m_pDataPatchDownloader);
 
+#if !defined(DEDICATED_SERVER)
 	bool bWasMultiplayer = gEnv->bMultiplayer;
+#endif
+
+#if !defined(EXCLUDE_NORMAL_LOG)
 	const char* const hostName = gEnv->pSystem->GetPlatformOS()->GetHostName();
 	CryLog("hostName = '%s'", hostName);
+#endif
 
 	if (g_pGameCVars->g_multiplayerModeOnly && multiplayer == false)
 	{
@@ -1426,7 +1444,9 @@ void CGame::InitGameType(bool multiplayer, bool fromInit /*= false*/)
 		EPlatform platform = GetPlatform();
 		switch (platform)
 		{
-		case ePlatform_PC:
+			case EPlatform::Windows:
+			case EPlatform::Linux:
+			case EPlatform::MacOS:
 			{
 				mpConfigName = "multiplayer_pc";
 				break;
@@ -1528,7 +1548,7 @@ void CGame::InitGameType(bool multiplayer, bool fromInit /*= false*/)
 #endif
 
 			CRY_ASSERT(!m_telemetryCollector);
-			MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, EMemStatContextFlags::MSF_None, "CTelemetryCollector");
+			MEMSTAT_CONTEXT(EMemStatContextType::Other, "CTelemetryCollector");
 			m_telemetryCollector = new CTelemetryCollector;
 
 			m_pPlaylistActivityTracker = new CPlaylistActivityTracker;
@@ -1536,13 +1556,13 @@ void CGame::InitGameType(bool multiplayer, bool fromInit /*= false*/)
 
 			if (g_pGameCVars->g_telemetry_gameplay_enabled)
 			{
-				MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, EMemStatContextFlags::MSF_None, "CStatsRecordingMgr");
+				MEMSTAT_CONTEXT(EMemStatContextType::Other, "CStatsRecordingMgr");
 				m_statsRecorder = new CStatsRecordingMgr;
 			}
 
 #if USE_TELEMETRY_BUFFERS
 			{
-				MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, EMemStatContextFlags::MSF_None, "Perf Telemetry Buffers");
+				MEMSTAT_CONTEXT(EMemStatContextType::Other, "Perf Telemetry Buffers");
 				if (g_pGameCVars->g_telemetrySampleRatePerformance > 0.0f)
 				{
 					m_performanceBuffer = new CTelemetryBuffer(60 * 1024, m_telemetryCollector, sizeof(SPerformanceTelemetry));
@@ -1810,7 +1830,7 @@ void CGame::InitPatchableModules(
 		{
 			m_pPlayerProgression->ResetUnlocks();
 
-			CRY_ASSERT_MESSAGE(m_pEquipmentLoadout == NULL, "double initialisation of equipment loadout - logic flow error");
+			CRY_ASSERT(m_pEquipmentLoadout == NULL, "double initialisation of equipment loadout - logic flow error");
 			m_pEquipmentLoadout = new CEquipmentLoadout();
 
 			if (CDataPatchDownloader* pDP = GetDataPatchDownloader())
@@ -2400,8 +2420,6 @@ void CGame::UpdateSaveIcon()
 //warning 6262 needs an investigation
 int CGame::Update(bool haveFocus, unsigned int updateFlags) PREFAST_SUPPRESS_WARNING(6262)
 {
-	CryProfile::ProfilerFrameStart(gEnv->nMainFrameID);
-
 #if defined(USER_timf)
 	if (m_needMultiplayerFrontEndAssets)
 	{
@@ -2470,7 +2488,7 @@ int CGame::Update(bool haveFocus, unsigned int updateFlags) PREFAST_SUPPRESS_WAR
 	{
 		if (m_pRayCaster)
 		{
-			FRAME_PROFILER("GlobalRayCaster", gEnv->pSystem, PROFILE_AI);
+			CRY_PROFILE_SECTION(PROFILE_GAME, "GlobalRayCaster");
 
 			m_pRayCaster->SetQuota(g_pGameCVars->g_gameRayCastQuota);
 			m_pRayCaster->Update(frameTime);
@@ -2478,7 +2496,7 @@ int CGame::Update(bool haveFocus, unsigned int updateFlags) PREFAST_SUPPRESS_WAR
 
 		if (m_pIntersectionTester)
 		{
-			FRAME_PROFILER("GlobalIntersectionTester", gEnv->pSystem, PROFILE_AI);
+			CRY_PROFILE_SECTION(PROFILE_GAME, "GlobalIntersectionTester");
 
 			m_pIntersectionTester->SetQuota(g_pGameCVars->g_gameIntersectionTestQuota);
 			m_pIntersectionTester->Update(frameTime);
@@ -2638,6 +2656,14 @@ int CGame::Update(bool haveFocus, unsigned int updateFlags) PREFAST_SUPPRESS_WAR
 		}
 	}
 
+	const bool shouldUpdate = gEnv->pGameFramework->IsGameStarted() && !gEnv->pGameFramework->IsGamePaused();
+
+	if (shouldUpdate)
+	{
+		if (m_pDialogSystem)
+			m_pDialogSystem->Update(frameTime);
+	}
+
 	if (gEnv->pGameFramework->IsGamePaused() == false)
 	{
 		m_pWeaponSystem->Update(frameTime);
@@ -2688,7 +2714,7 @@ int CGame::Update(bool haveFocus, unsigned int updateFlags) PREFAST_SUPPRESS_WAR
 			if (timeRemaining > 0.f)
 			{
 				SHUDEvent resumingEvent(eHUDEvent_OnUpdateGameResumeMessage);
-				int time = MAX(int(floor(timeRemaining + 0.5f)), 0);
+				int time = std::max(int(floor(timeRemaining + 0.5f)), 0);
 				resumingEvent.AddData(time);
 				CHUDEventDispatcher::CallEvent(resumingEvent);
 			}
@@ -2847,6 +2873,7 @@ int CGame::Update(bool haveFocus, unsigned int updateFlags) PREFAST_SUPPRESS_WAR
 
 						const float fRenderThreadTime = renderTimes.fTimeProcessedRT;
 						const float fWaitForRender = renderTimes.fWaitForRender;
+						const float fWaitForGPU = renderTimes.fWaitForGPU_MT + renderTimes.fWaitForGPU_RT;
 
 						if (fRenderThreadTime > 0.0f)
 						{
@@ -2863,11 +2890,12 @@ int CGame::Update(bool haveFocus, unsigned int updateFlags) PREFAST_SUPPRESS_WAR
 						{
 							s_gpuTime += gpuFrameTime;
 						}
-						s_waitForGPUTime += renderTimes.fWaitForGPU;
+
+						s_waitForGPUTime += fWaitForGPU;
 
 						//wait for GPU is never zero, using small epsilon to determine if GPU Limited
 						const float GPU_EPSILON = 0.001f;
-						s_gpuLimited += (renderTimes.fWaitForGPU > GPU_EPSILON) ? 1 : 0;
+						s_gpuLimited += (fWaitForGPU > GPU_EPSILON) ? 1 : 0;
 
 						int nGeneralDrawcalls = 0;
 						int nShadowDrawcalls = 0;
@@ -3017,7 +3045,14 @@ int CGame::Update(bool haveFocus, unsigned int updateFlags) PREFAST_SUPPRESS_WAR
 	LiveCreateUpdate();
 #endif
 
-	CryProfile::ProfilerFrameEnd(gEnv->nMainFrameID);
+	if ((updateFlags & ESYSUPDATE_EDITOR_ONLY) == 0 &&  (updateFlags & ESYSUPDATE_EDITOR_AI_PHYSICS)!= 0 && !gEnv->bMultiplayer)
+	{
+		CRangeSignaling::ref().SetDebug(g_pGameCVars->ai_DebugRangeSignaling == 1);
+		CRangeSignaling::ref().Update(frameTime);
+
+		CSignalTimer::ref().SetDebug(g_pGameCVars->ai_DebugSignalTimers == 1);
+		CSignalTimer::ref().Update(frameTime);
+	}
 
 	return 1;
 }
@@ -3090,6 +3125,19 @@ void CGame::EditorResetGame(bool bStart)
 
 	if (m_pMovingPlatformMgr)
 		m_pMovingPlatformMgr->Reset();
+
+
+	if (m_pDialogSystem)
+	{
+		m_pDialogSystem->Reset(false);
+		if (bStart && CDialogSystem::sAutoReloadScripts != 0)
+		{
+			m_pDialogSystem->ReloadScripts();
+		}
+	}
+
+	CRangeSignaling::ref().OnEditorSetGameMode(bStart);
+	CSignalTimer::ref().OnEditorSetGameMode(bStart);
 }
 
 void CGame::Shutdown()
@@ -3135,6 +3183,9 @@ void CGame::Shutdown()
 
 	gEnv->pGameFramework->ReleaseExtensions();
 
+	if (m_pDialogSystem)
+		m_pDialogSystem->Shutdown();
+
 	this->~CGame();
 }
 
@@ -3150,17 +3201,7 @@ const char* CGame::GetName()
 
 EPlatform CGame::GetPlatform() const
 {
-	EPlatform platform = ePlatform_Unknown;
-
-#if CRY_PLATFORM_WINDOWS || CRY_PLATFORM_DURANGO || CRY_PLATFORM_APPLE || CRY_PLATFORM_LINUX || CRY_PLATFORM_ANDROID
-	platform = ePlatform_PC;
-#elif CRY_PLATFORM_ORBIS
-	platform = ePlatform_PS4;
-#else
-	#error Unsupported Platform
-#endif
-
-	return platform;
+	return EPlatform::Current;
 }
 
 void CGame::InitPlatformOS()
@@ -3187,6 +3228,12 @@ void CGame::OnPostUpdate(float fDeltaTime)
 #if ENABLE_VISUAL_DEBUG_PROTOTYPE
 	UpdateVisualDebug(fDeltaTime);
 #endif // ENABLE_VISUAL_DEBUG_PROTOTYPE
+
+	CRangeSignaling::ref().SetDebug(g_pGameCVars->ai_DebugRangeSignaling == 1);
+	CRangeSignaling::ref().Update(fDeltaTime);
+
+	CSignalTimer::ref().SetDebug(g_pGameCVars->ai_DebugSignalTimers == 1);
+	CSignalTimer::ref().Update(fDeltaTime);
 }
 
 void CGame::OnSaveGame(ISaveGame* pSaveGame)
@@ -3303,8 +3350,8 @@ bool CGame::OnInputEvent(const SInputEvent& inputEvent)
 	if (isGamePadController)
 	{
 		// Store device index of controller providing input
-		bool isConnectionChangeEvent = ((inputEvent.keyId == eKI_SYS_ConnectDevice) || (inputEvent.keyId == eKI_SYS_DisconnectDevice) ||
-		                                (inputEvent.keyId == eKI_XI_Connect) || (inputEvent.keyId == eKI_XI_Disconnect));
+		bool isConnectionChangeEvent = ((inputEvent.keyId == eKI_SYS_ConnectDevice) || (inputEvent.keyId == eKI_SYS_DisconnectDevice));
+
 		if (isConnectionChangeEvent == false) // Only want to set device index when real input comes through, not device changes
 		{
 			m_previousInputControllerDeviceIndex = inputEvent.deviceIndex;
@@ -3384,7 +3431,7 @@ void CGame::RemoveRenderSceneListener(IRenderSceneListener* pListener)
 
 void CGame::SetExclusiveControllerFromPreviousInput()
 {
-	CRY_ASSERT_MESSAGE(m_pPlayerProfileManager, "No player profile manager, controller index will not be set, this will cause problems");
+	CRY_ASSERT(m_pPlayerProfileManager, "No player profile manager, controller index will not be set, this will cause problems");
 
 	if (m_hasExclusiveController)
 	{
@@ -3422,7 +3469,6 @@ void CGame::RemoveExclusiveController()
 {
 	CryLog("CGame::RemoveExclusiveController");
 
-	bool hasExclusiveController = m_hasExclusiveController;
 	m_hasExclusiveController = false;
 	m_bExclusiveControllerConnected = false;
 
@@ -3520,9 +3566,23 @@ void CGame::OnActionEvent(const SActionEvent& event)
 		break;
 	case eAE_disconnected:
 		break;
+	case eAE_resetLoadedLevel:
+	{
+		if (m_pDialogSystem)
+		{
+			m_pDialogSystem->Reset(true);
+		}
+		break;
+	}
 	case eAE_unloadLevel:
 		{
 			MEMSTAT_LABEL_SCOPED("CGame::OnActionEvent(eAE_unloadLevel)");
+			
+			if (m_pDialogSystem)
+			{
+				m_pDialogSystem->Reset(true);
+			}
+			
 			m_pGameCache->Reset();
 
 			m_pGameParametersStorage->GetItemResourceCache().FlushCaches();
@@ -3588,6 +3648,13 @@ void CGame::OnActionEvent(const SActionEvent& event)
 	case eAE_loadLevel:
 		{
 			MEMSTAT_LABEL_SCOPED("CGame::OnActionEvent(eAE_loadLevel)");
+			
+			if (m_pDialogSystem)
+			{
+				m_pDialogSystem->Reset(false);
+				m_pDialogSystem->Init();
+			}
+			
 			if (m_pGameAISystem)
 			{
 				m_pGameAISystem->Reset(false);
@@ -3640,7 +3707,7 @@ void CGame::OnActionEvent(const SActionEvent& event)
 		break;
 	case eAE_disconnectCommandFinished:
 #if CRY_PLATFORM_DURANGO
-		if (!g_pGame->GetGameLobby()->IsCurrentlyInSession())
+		if (g_pGame->GetGameLobby() && !g_pGame->GetGameLobby()->IsCurrentlyInSession())
 		{
 			EnsureSigninState();
 		}
@@ -3783,7 +3850,7 @@ void CGame::LoadActionMaps(const char* filename)
 	{
 		// use action map without any profile stuff
 		pDefaultActionMap = pActionMapManager->GetActionMap("default");
-		CRY_ASSERT_MESSAGE(pDefaultActionMap, "'default' action map not found!");
+		CRY_ASSERT(pDefaultActionMap, "'default' action map not found!");
 	}
 
 	if (pDebugActionMap == nullptr)
@@ -3830,6 +3897,7 @@ void CGame::InitScriptBinds()
 	m_pScriptBindTurret = new CScriptBind_Turret(gEnv->pGameFramework->GetISystem());
 	m_pScriptBindProtected = new CScriptBind_ProtectedBinds(gEnv->pGameFramework->GetISystem());
 	m_pScriptBindLightningArc = new CScriptBind_LightningArc(gEnv->pGameFramework->GetISystem());
+	m_pScriptBindDialogSystem = new CScriptBind_DialogSystem(gEnv->pGameFramework->GetISystem(), m_pDialogSystem);
 
 	ICVar* pEnableAI = gEnv->pConsole->GetCVar("sv_AISystem");
 	if (!gEnv->bMultiplayer || (pEnableAI && pEnableAI->GetIVal()))
@@ -3856,6 +3924,7 @@ void CGame::ReleaseScriptBinds()
 	SAFE_DELETE(m_pScriptBindTurret);
 	SAFE_DELETE(m_pScriptBindProtected);
 	SAFE_DELETE(m_pScriptBindGameAI);
+	SAFE_DELETE(m_pScriptBindDialogSystem);
 }
 
 void CGame::CheckReloadLevel()
@@ -3933,6 +4002,7 @@ void CGame::GetMemoryStatistics(ICrySizer* s)
 	s->Add(*m_pScriptBindHitDeathReactions);
 	s->Add(*m_pScriptBindBoids);
 	s->Add(*m_pScriptBindTurret);
+	s->Add(*m_pScriptBindDialogSystem);
 	s->Add(*m_pGameActions);
 
 	m_pGameParametersStorage->GetMemoryStatistics(s);
@@ -3948,6 +4018,9 @@ void CGame::GetMemoryStatistics(ICrySizer* s)
 
 	if (m_pMovementTransitionsSystem)
 		m_pMovementTransitionsSystem->GetMemoryUsage(s);
+
+	if (m_pDialogSystem)
+		m_pDialogSystem->GetMemoryStatistics(s);
 
 	m_pGameCache->GetMemoryUsage(s);
 }
@@ -4032,13 +4105,13 @@ void CGame::LoadMappedLevelNames(const char* xmlPath)
 
 IGameStateRecorder* CGame::CreateGameStateRecorder(IGameplayListener* pL)
 {
-	CGameStateRecorder* pGSP = new CGameStateRecorder();
-
-	if (pGSP)
-		pGSP->RegisterListener(pL);
-
-	return (IGameStateRecorder*)pGSP;
-
+	if (!m_pGameStateRecorder)
+	{
+		m_pGameStateRecorder = new CGameStateRecorder();
+		CRY_ASSERT(m_pGameStateRecorder);
+		m_pGameStateRecorder->RegisterListener(pL);
+	}
+	return m_pGameStateRecorder;
 }
 
 CInteractiveObjectRegistry& CGame::GetInteractiveObjectsRegistry() const
@@ -4102,7 +4175,7 @@ public:
 		else
 		{
 			m_bufferOverflow = true;
-			CRY_ASSERT_MESSAGE(false, "Buffer size is not large enough");
+			CRY_ASSERT(false, "Buffer size is not large enough");
 		}
 
 		SwapEndian(data, eBigEndian); //swap back again
@@ -4120,7 +4193,7 @@ public:
 		else
 		{
 			m_bufferOverflow = true;
-			CRY_ASSERT_MESSAGE(false, "Buffer size is not large enough");
+			CRY_ASSERT(false, "Buffer size is not large enough");
 		}
 	}
 
@@ -4204,7 +4277,7 @@ void CGame::UploadSessionTelemetry(void)
 				CGameRules::TCryUserIdSet::const_iterator itUser;
 				for (itUser = users.begin(); itUser != users.end(); ++itUser)
 				{
-					CRY_ASSERT_MESSAGE(itUser->IsValid(), "CryUserId is not valid");
+					CRY_ASSERT(itUser->IsValid(), "CryUserId is not valid");
 					CryFixedStringT<CRYLOBBY_USER_GUID_STRING_LENGTH> str = itUser->get()->GetGUIDAsString();
 					buffer.WriteString(str);
 				}
@@ -4345,7 +4418,7 @@ float CGame::GetRemainingHostMigrationTimeoutTime() const
 {
 	const float timePassed = GetTimeSinceHostMigrationStateChanged();
 	const float timeRemaining = m_hostMigrationNetTimeoutLength - timePassed;
-	return MAX(timeRemaining, 0.f);
+	return std::max(timeRemaining, 0.f);
 }
 
 //------------------------------------------------------------------------
@@ -4360,7 +4433,7 @@ float CGame::GetHostMigrationTimeTillResume() const
 	{
 		const float curTime = gEnv->pTimer->GetAsyncCurTime();
 		const float timePassed = curTime - m_hostMigrationTimeStateChanged;
-		timeRemaining = MAX(g_pGameCVars->g_hostMigrationResumeTime - timePassed, 0.f);
+		timeRemaining = std::max(g_pGameCVars->g_hostMigrationResumeTime - timePassed, 0.f);
 	}
 	return timeRemaining;
 }
@@ -4384,7 +4457,7 @@ void CGame::SetHostMigrationStateAndTime(EHostMigrationState newState, float tim
 
 		ICVar* pTimeoutCVar = gEnv->pConsole->GetCVar("net_migrate_timeout");
 		m_hostMigrationNetTimeoutLength = pTimeoutCVar->GetFVal();
-		pTimeoutCVar->SetOnChangeCallback(OnHostMigrationNetTimeoutChanged);
+		m_migrationTimeoutCallbackIndex = pTimeoutCVar->AddOnChange(OnHostMigrationNetTimeoutChanged);
 	}
 
 	m_hostMigrationState = newState;
@@ -4417,8 +4490,14 @@ void CGame::AbortHostMigration()
 	gEnv->pGameFramework->PauseGame(false, false);
 	m_hostMigrationState = eHMS_NotMigrating;
 	m_hostMigrationTimeStateChanged = 0.f;
-	ICVar* pTimeoutCVar = gEnv->pConsole->GetCVar("net_migrate_timeout");
-	pTimeoutCVar->SetOnChangeCallback(NULL);
+	if (m_migrationTimeoutCallbackIndex != -1)
+	{
+		if (ICVar* pTimeoutCVar = gEnv->pConsole->GetCVar("net_migrate_timeout"))
+		{
+			pTimeoutCVar->RemoveOnChangeFunctor(m_migrationTimeoutCallbackIndex);
+			m_migrationTimeoutCallbackIndex = -1;
+		}
+	}
 	g_pGameActions->FilterHostMigration()->Enable(false);
 }
 
@@ -4900,7 +4979,7 @@ void CGame::OnSystemEvent(ESystemEvent event, UINT_PTR wparam, UINT_PTR lparam)
 
 			if (gEnv->bMultiplayer && !m_pRecordingSystem)
 			{
-				MEMSTAT_CONTEXT(EMemStatContextTypes::MSC_Other, EMemStatContextFlags::MSF_None, "RecordingSystem");
+				MEMSTAT_CONTEXT(EMemStatContextType::Other, "RecordingSystem");
 				m_pRecordingSystem = new CRecordingSystem();
 			}
 
@@ -4911,13 +4990,8 @@ void CGame::OnSystemEvent(ESystemEvent event, UINT_PTR wparam, UINT_PTR lparam)
 
 			if (gEnv->pScriptSystem)
 			{
-				static bool physicsLuaLoaded = false;
-				if (!physicsLuaLoaded)
-				{
-					// Load explosion shapes.
-					gEnv->pScriptSystem->ExecuteFile("scripts/physics.lua", true, true);
-					physicsLuaLoaded = true;
-				}
+				// Load explosion shapes.
+				gEnv->pScriptSystem->ExecuteFile("scripts/physics.lua", true, true);
 			}
 		}
 		break;
@@ -5380,18 +5454,14 @@ void CGame::InviteAcceptedCallback(UCryLobbyEventData eventData, void* arg)
 
 	bool acceptInvite = true;
 
-	CRY_ASSERT_MESSAGE(pGame, "No game!");
+	CRY_ASSERT(pGame, "No game!");
 
 	// we should always accept the invite if we have no exclusive controller
 	if (pGame->m_hasExclusiveController)
 	{
-		// can't possibly be in a squad if we're not multiplayer, i hope
+		// Should not be in a squad if not in multiplayer
 		if (gEnv->bMultiplayer && inviteData->m_error == eCLE_Success)
 		{
-			ICryLobby* pLobby = gEnv->pNetwork->GetLobby();
-			ICryLobbyService* pLobbyService = pLobby ? pLobby->GetLobbyService(eCLS_Online) : NULL;
-			ICryMatchMaking* pMatchMaking = pLobbyService ? pLobbyService->GetMatchMaking() : NULL;
-
 			bool alreadyInSession = false;
 
 			// the session we are trying to join is the same as the session we are in
@@ -5444,7 +5514,7 @@ void CGame::OnlineStateCallback(UCryLobbyEventData eventData, void* arg)
 	CryLog("[Game] OnlineStateCallback");
 
 	CGame* pGame = (CGame*)arg;
-	CRY_ASSERT_MESSAGE(pGame, "No game!");
+	CRY_ASSERT(pGame, "No game!");
 
 	SCryLobbyOnlineStateData* pOnlineStateData = eventData.pOnlineStateData;
 	if (pOnlineStateData)
@@ -5473,7 +5543,7 @@ void CGame::EthernetStateCallback(UCryLobbyEventData eventData, void* arg)
 	CryLog("[Game] EthernetStateCallback");
 
 	CGame* pGame = (CGame*)arg;
-	CRY_ASSERT_MESSAGE(pGame, "No game!");
+	CRY_ASSERT(pGame, "No game!");
 
 	SCryLobbyEthernetStateData* pEthernetStateData = eventData.pEthernetStateData;
 
@@ -5655,6 +5725,18 @@ void CGame::PreSerialize()
 void CGame::FullSerialize(TSerialize serializer)
 {
 	serializer.BeginGroup("IGame");
+	
+	if (m_pDialogSystem)
+	{
+		if (serializer.IsReading())
+		{
+			m_pDialogSystem->Reset(false);
+		}
+		serializer.BeginGroup("DialogSystem");
+		m_pDialogSystem->Serialize(serializer);
+		serializer.EndGroup();
+	}
+	
 	if (GetMOSystem())
 	{
 		GetMOSystem()->Serialize(serializer);
@@ -5765,11 +5847,7 @@ void CGame::OnDedicatedConfigEntry(const char* szKey, const char* szValue)
 		m_variantOptions[szKey] = szValue;
 	}
 
-#if defined(CVARS_WHITELIST)
-	ICVarsWhitelist* pCVarsWhitelist = gEnv->pSystem->GetCVarsWhiteList();
-	bool execute = (pCVarsWhitelist) ? pCVarsWhitelist->IsWhiteListed(szKey, false) : true;
-	if (execute)
-#endif // defined(CVARS_WHITELIST)
+	if (gEnv->pSystem->IsCVarWhitelisted(szKey, false))
 	{
 		gEnv->pConsole->LoadConfigVar(szKey, szValue);
 	}
@@ -5845,7 +5923,7 @@ void CGame::CommitDeferredKills()
 	{
 		const EntityId entityID = *it;
 
-		if (IEntity* entity = gEnv->pEntitySystem->GetEntity(entityID))
+		if (gEnv->pEntitySystem->GetEntity(entityID) != nullptr)
 		{
 			// Kill the agent by entityId a lot of damage.
 			const HitInfo hitinfo(entityID, entityID, entityID,
@@ -6214,6 +6292,11 @@ void CGame::EnsureSigninState()
 	}
 }
 #endif
+
+void GameWarningImpl(const char* format, va_list args)
+{
+	GetISystem()->WarningV(VALIDATOR_MODULE_GAME, VALIDATOR_WARNING, 0, NULL, format, args);
+}
 
 //////////////////////////////////////////////////////////////////////////
 //////////////////////////////////////////////////////////////////////////

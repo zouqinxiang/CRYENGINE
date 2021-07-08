@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 // -------------------------------------------------------------------------
 //  File name:   FlowXmlFileNodes.cpp
@@ -307,8 +307,6 @@ public:
 		{
 			const string file = GetPortString(pActInfo, EIP_File);
 			const int loc = GetPortInt(pActInfo, EIP_Location);
-
-			ICryPak* pPak = gEnv->pCryPak;
 
 			// Qualify path
 			string szLoadPath;

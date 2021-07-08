@@ -1,11 +1,5 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
-
-#ifndef __VehicleHelper_h__
-#define __VehicleHelper_h__
-
-#if _MSC_VER > 1000
-	#pragma once
-#endif
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
+#pragma once
 
 #include "Objects/BaseObject.h"
 #include "VehicleDialogComponent.h"
@@ -22,14 +16,13 @@ class CVehicleHelper : public CBaseObject, public CVeedObject
 {
 public:
 	DECLARE_DYNCREATE(CVehicleHelper)
-	~CVehicleHelper();
 	//////////////////////////////////////////////////////////////////////////
-	// Ovverides from CBaseObject.
+	// Overrides from CBaseObject.
 	//////////////////////////////////////////////////////////////////////////
 	bool Init(CBaseObject* prev, const string& file);
 	void Done();
 
-	void Display(DisplayContext& dc);
+	void Display(CObjectRenderHelper& objRenderHelper) override;
 
 	void GetBoundSphere(Vec3& pos, float& radius);
 	void GetBoundBox(AABB& box);
@@ -60,15 +53,13 @@ public:
 protected:
 	//! Dtor must be protected.
 	CVehicleHelper();
-	void         DeleteThis() { delete this; };
+	void         DeleteThis() { delete this; }
 	void         PostClone(CBaseObject* pFromObject, CObjectCloneContext& ctx);
 
 	virtual void OnTransform();
 
 	float              m_innerRadius;
 	float              m_outerRadius;
-
-	IVariable*         m_pVar;
 
 	bool               m_fromGeometry;
 
@@ -81,10 +72,8 @@ protected:
 class CVehicleHelperClassDesc : public CObjectClassDesc
 {
 public:
-	ObjectType     GetObjectType()   { return OBJTYPE_OTHER; };
-	const char*    ClassName()       { return "VehicleHelper"; };
-	const char*    Category()        { return ""; };
-	CRuntimeClass* GetRuntimeClass() { return RUNTIME_CLASS(CVehicleHelper); };
+	ObjectType     GetObjectType()   { return OBJTYPE_OTHER; }
+	const char*    ClassName()       { return "VehicleHelper"; }
+	const char*    Category()        { return ""; }
+	CRuntimeClass* GetRuntimeClass() { return RUNTIME_CLASS(CVehicleHelper); }
 };
-
-#endif // __VehicleHelper_h__

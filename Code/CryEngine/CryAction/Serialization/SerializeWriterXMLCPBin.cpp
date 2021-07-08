@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "SerializeWriterXMLCPBin.h"
@@ -13,7 +13,7 @@ static const size_t MAX_NODE_STACK_DEP = 40;
 CSerializeWriterXMLCPBin::CSerializeWriterXMLCPBin(const XMLCPB::CNodeLiveWriterRef& nodeRef, XMLCPB::CWriterInterface& binWriter)
 	: m_binWriter(binWriter)
 {
-	assert(nodeRef.IsValid());
+	CRY_ASSERT(nodeRef.IsValid());
 	m_curTime = gEnv->pTimer->GetFrameStartTime();
 	m_nodeStack.reserve(MAX_NODE_STACK_DEP);
 	m_nodeStack.push_back(nodeRef);
@@ -53,8 +53,7 @@ void CSerializeWriterXMLCPBin::RecursiveAddXmlNodeRef(XMLCPB::CNodeLiveWriterRef
 	{
 		const char* pKey = NULL;
 		const char* pVal = NULL;
-		bool ok = xmlNode->getAttributeByIndex(i, &pKey, &pVal);
-		assert(ok);
+		CRY_VERIFY(xmlNode->getAttributeByIndex(i, &pKey, &pVal));
 		BChild->AddAttr(pKey, pVal);
 	}
 
@@ -84,9 +83,8 @@ bool CSerializeWriterXMLCPBin::ValueByteArray(const char* name, const uint8* dat
 #ifndef _RELEASE
 	if (GetISystem()->IsDevMode() && curNode.IsValid())
 	{
-		if (curNode->HaveAttr(name))
+		if (!CRY_VERIFY(!curNode->HaveAttr(name)))
 		{
-			assert(0);
 			CryWarning(VALIDATOR_MODULE_SYSTEM, VALIDATOR_WARNING, "!Duplicate tag Value( \"%s\" ) in Group %s", name, GetStackInfo());
 		}
 	}
@@ -110,68 +108,64 @@ void CSerializeWriterXMLCPBin::ScriptValue(XMLCPB::CNodeLiveWriterRef addTo, con
 
 	m_luaSaveStack.push_back(name);
 
-	assert(tag || name);
+	CRY_ASSERT(tag || name);
 	XMLCPB::CNodeLiveWriterRef node = addTo->AddChildNode(tag ? tag : name);
 	if (tag && name)
 		node->AddAttr(TAG_SCRIPT_NAME, name);
 
-	switch (value.type)
+	switch (value.GetType())
 	{
-	case ANY_TNIL:
+	case EScriptAnyType::Nil:
 		node->AddAttr(TAG_SCRIPT_TYPE, "nil");
 		break;
-	case ANY_TBOOLEAN:
-		node->AddAttr(TAG_SCRIPT_VALUE, value.b);
+	case EScriptAnyType::Boolean:
+		node->AddAttr(TAG_SCRIPT_VALUE, value.GetBool());
 		node->AddAttr(TAG_SCRIPT_TYPE, "b");
 		break;
-	case ANY_THANDLE:
+	case EScriptAnyType::Handle:
 		{
 			// We are always writing a uint64 for handles. In x86, this is a bit inefficient. But when dealing
 			//	with writing in x86 and reading in x64 (or vice versa), this ensures we don't have to guess which DWORD
 			//	to cast from when reading (especially for Endian).
-			uint64 v = (uint64)(UINT_PTR)value.ptr;
+			uint64 v = value.GetScriptHandle().n;
 			node->AddAttr(TAG_SCRIPT_VALUE, v);
 			node->AddAttr(TAG_SCRIPT_TYPE, "h");
 		}
 		break;
-	case ANY_TNUMBER:
-		node->AddAttr(TAG_SCRIPT_VALUE, value.number);
+	case EScriptAnyType::Number:
+		node->AddAttr(TAG_SCRIPT_VALUE, value.GetNumber());
 		node->AddAttr(TAG_SCRIPT_TYPE, "n");
 		break;
-	case ANY_TSTRING:
-		node->AddAttr(TAG_SCRIPT_VALUE, value.str);
+	case EScriptAnyType::String:
+		node->AddAttr(TAG_SCRIPT_VALUE, value.GetString());
 		node->AddAttr(TAG_SCRIPT_TYPE, "s");
 		break;
-	case ANY_TVECTOR:
-		{
-			Vec3 temp(value.vec3.x, value.vec3.y, value.vec3.z);
-			node->AddAttr(TAG_SCRIPT_VALUE, temp);
-			node->AddAttr(TAG_SCRIPT_TYPE, "v");
-		}
+	case EScriptAnyType::Vector:
+		node->AddAttr(TAG_SCRIPT_VALUE, value.GetVector());
+		node->AddAttr(TAG_SCRIPT_TYPE, "v");
 		break;
-	case ANY_TTABLE:
-		if (!value.table)
+	case EScriptAnyType::Table:
+		if (!value.GetScriptTable())
 			node->AddAttr(TAG_SCRIPT_TYPE, "nil");
 		else
 		{
 			// Check for recursion.
-			if (std::find(m_savedTables.begin(), m_savedTables.end(), value.table) == m_savedTables.end())
+			if (CRY_VERIFY(std::find(m_savedTables.begin(), m_savedTables.end(), value.GetScriptTable()) == m_savedTables.end(), "Writing script table recursively"))
 			{
-				m_savedTables.push_back(value.table);
-				WriteTable(node, value.table, true);
+				m_savedTables.push_back(value.GetScriptTable());
+				WriteTable(node, value.GetScriptTable(), true);
 				m_savedTables.pop_back();
 			}
 			else
 			{
 				// Trying to write table recursively.
-				assert(0 && "Writing script table recursively");
 				CryWarning(VALIDATOR_MODULE_SYSTEM, VALIDATOR_WARNING, "!Writing script table recursively: %s", GetStackInfo());
 				bShouldAdd = false;
 			}
 		}
 		break;
 	default:
-		CryWarning(VALIDATOR_MODULE_SYSTEM, VALIDATOR_WARNING, "!Unhandled script-any-type %s of type:%d in Group %s", name, value.type, GetStackInfo());
+		CryWarning(VALIDATOR_MODULE_SYSTEM, VALIDATOR_WARNING, "!Unhandled script-any-type %s of type:%d in Group %s", name, value.GetType(), GetStackInfo());
 		Failed();
 		bShouldAdd = false;
 	}
@@ -204,7 +198,7 @@ void CSerializeWriterXMLCPBin::EndGroup()
 	}
 	CurNode()->Done();   // this call is actually not needed. because the XMLCPBin will already detect when the node can be closed. But it does not hurt to do it explicitely.
 	m_nodeStack.pop_back();
-	assert(!m_nodeStack.empty());
+	CRY_ASSERT(!m_nodeStack.empty());
 }
 
 // TODO: need to re-look carefully at all this script management code. Right now it is esentially a copy paste from CSerializeXMLWriter
@@ -223,20 +217,20 @@ bool CSerializeWriterXMLCPBin::ShouldSkipValue(const char* name, const ScriptAny
 	if (!strlen(name))
 		return true;
 
-	switch (value.type)
+	switch (value.GetType())
 	{
-	case ANY_TBOOLEAN:
-	case ANY_THANDLE:
-	case ANY_TNIL:
-	case ANY_TNUMBER:
-	case ANY_TSTRING:
-	case ANY_TVECTOR:
+	case EScriptAnyType::Boolean:
+	case EScriptAnyType::Handle:
+	case EScriptAnyType::Nil:
+	case EScriptAnyType::Number:
+	case EScriptAnyType::String:
+	case EScriptAnyType::Vector:
 		return false;
-	case ANY_TTABLE:
+	case EScriptAnyType::Table:
 		{
 			ScriptAnyValue temp;
-			value.table->GetValueAny("__nopersist", temp);
-			return temp.type != ANY_TNIL;
+			value.GetScriptTable()->GetValueAny("__nopersist", temp);
+			return temp.GetType() != EScriptAnyType::Nil;
 		}
 	default:
 		return true;
@@ -275,7 +269,7 @@ void CSerializeWriterXMLCPBin::WriteTable(XMLCPB::CNodeLiveWriterRef node, Smart
 			{
 				ScriptAnyValue tempValue;
 				tbl->GetAtAny(i, tempValue);
-				if (tempValue.type != ANY_TFUNCTION && tempValue.type != ANY_TUSERDATA && tempValue.type != ANY_ANY)
+				if (tempValue.GetType() != EScriptAnyType::Function && tempValue.GetType() != EScriptAnyType::UserData && tempValue.GetType() != EScriptAnyType::Any)
 					ScriptValue(node, "i", NULL, tempValue, true);
 			}
 		}
@@ -291,7 +285,7 @@ void CSerializeWriterXMLCPBin::WriteTable(XMLCPB::CNodeLiveWriterRef node, Smart
 					tbl->GetValueAny(iter.sKey, tempValue);
 					if (ShouldSkipValue(iter.sKey, tempValue))
 						continue;
-					if (tempValue.type != ANY_TFUNCTION && tempValue.type != ANY_TUSERDATA && tempValue.type != ANY_ANY)
+					if (tempValue.GetType() != EScriptAnyType::Function && tempValue.GetType() != EScriptAnyType::UserData && tempValue.GetType() != EScriptAnyType::Any)
 						ScriptValue(node, "te", iter.sKey, tempValue, true);
 				}
 			}

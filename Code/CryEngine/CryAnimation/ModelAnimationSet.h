@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -287,8 +287,8 @@ public:
 #endif
 	ILINE uint32 GetGlobalIDByAnimID_Fast(int nAnimationId) const
 	{
-		assert(nAnimationId >= 0);
-		assert(nAnimationId < m_arrAnimations.size());
+		CRY_ASSERT(nAnimationId >= 0);
+		CRY_ASSERT(nAnimationId < m_arrAnimations.size());
 		return m_arrAnimations[nAnimationId].m_nGlobalAnimId;
 	};
 

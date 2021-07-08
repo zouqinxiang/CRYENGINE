@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #ifndef __BUFFER_UTIL_H__
 #define __BUFFER_UTIL_H__
@@ -76,7 +76,7 @@ private:
 		else
 		{
 			m_bBufferOverflow = true;
-			CRY_ASSERT_MESSAGE(false, "Buffer size is not large enough");
+			CRY_ASSERT(false, "Buffer size is not large enough");
 		}
 
 		if (eBigEndian)
@@ -102,7 +102,7 @@ private:
 		else
 		{
 			m_bBufferOverflow = true;
-			CRY_ASSERT_MESSAGE(false, "Buffer size is not large enough");
+			CRY_ASSERT(false, "Buffer size is not large enough");
 		}
 	}
 
@@ -124,7 +124,7 @@ private:
 		else
 		{
 			m_bBufferOverflow = true;
-			CRY_ASSERT_MESSAGE(false, "Buffer size is not large enough");
+			CRY_ASSERT(false, "Buffer size is not large enough");
 		}
 	}
 
@@ -144,7 +144,7 @@ private:
 		else
 		{
 			m_bBufferOverflow = true;
-			CRY_ASSERT_MESSAGE(false, "Buffer size is not large enough");
+			CRY_ASSERT(false, "Buffer size is not large enough");
 		}
 	}
 

@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #ifndef _GALLOCATOR_CRYMEM_H_
 #define _GALLOCATOR_CRYMEM_H_
@@ -12,6 +12,7 @@
 	#pragma warning(disable : 6011)// Dereferencing NULL pointer
 	#include <GSysAlloc.h>
 	#pragma warning(pop)
+	#include <CryThreading/CryThread.h>
 
 class GFxMemoryArenaWrapper : public GSysAllocPaged
 {

@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #ifndef __ICommunicationManager_h__
 #define __ICommunicationManager_h__
@@ -174,9 +174,9 @@ struct SCommunicationRequest
 		, ordering(Unordered)
 		, contextExpiry(0.0f)
 		, minSilence(-1.0f)
-		, eventListener(0)
 		, skipCommSound(false)
 		, skipCommAnimation(false)
+		, eventListener(0)
 	{
 	}
 

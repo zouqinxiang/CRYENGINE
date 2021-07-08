@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
 -------------------------------------------------------------------------
@@ -41,7 +41,7 @@ CActionMultiCoopAnimation::~CActionMultiCoopAnimation()
 
 void CActionMultiCoopAnimation::AddSlave( SParticipant* pSlave )
 {
-	CRY_ASSERT_MESSAGE(GetStatus()==None,"Slaves must be added before queueing the action!");
+	CRY_ASSERT(GetStatus()==None,"Slaves must be added before queueing the action!");
 	m_slaves.push_back(pSlave);
 	pSlave->OnAddedAsSlave();
 }
@@ -56,7 +56,7 @@ void CActionMultiCoopAnimation::UpdateSceneRoot( const QuatT& sceneRoot )
 	}
 }
 
-void CActionMultiCoopAnimation::OnEntityEvent( IEntity *pEntity,SEntityEvent &event )
+void CActionMultiCoopAnimation::OnEntityEvent( IEntity *pEntity, const SEntityEvent& event )
 {
 	if(event.event==ENTITY_EVENT_DONE)
 	{
@@ -111,7 +111,7 @@ void CActionMultiCoopAnimation::Install()
 	TBaseAction::Install();
 
 	m_master.Install();
-	CRY_ASSERT_MESSAGE(m_master.GetActionController(), "Master must have ActionController.");
+	CRY_ASSERT(m_master.GetActionController(), "Master must have ActionController.");
 
 	if (m_slaves.empty()==false)
 	{

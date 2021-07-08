@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 
@@ -15,57 +15,47 @@ namespace UQS
 		//
 		//===================================================================================
 
-		CQueryResultSet::CQueryResultSet()
-			: m_pItemFactory(nullptr)
+		CQueryResultSet::CQueryResultSet(const IItemList& generatedItems, std::vector<size_t>&& itemIndexes, std::vector<float>&& itemScores)
+			: m_scores(std::move(itemScores))
 		{
-			// nothing
+			CRY_ASSERT(itemIndexes.size() == m_scores.size());
+
+			const size_t numIndexes = itemIndexes.size();
+			const size_t* pIndexes = (numIndexes > 0) ? &itemIndexes.front() : nullptr;
+
+			m_items.CopyOtherToSelfViaIndexList(generatedItems, pIndexes, numIndexes);
 		}
 
 		Client::IItemFactory& CQueryResultSet::GetItemFactory() const
 		{
-			assert(m_pItemFactory);
-			return *m_pItemFactory;
+			return m_items.GetItemFactory();
 		}
 
 		size_t CQueryResultSet::GetResultCount() const
 		{
-			assert(m_pItemFactory);
-			assert(m_items.GetItemCount() == m_scores.size());
+			CRY_ASSERT(m_items.GetItemCount() == m_scores.size());
 
 			return m_items.GetItemCount();
 		}
 
 		IQueryResultSet::SResultSetEntry CQueryResultSet::GetResult(size_t index) const
 		{
-			assert(m_pItemFactory);
-			assert(m_items.GetItemCount() == m_scores.size());
-			assert(index < m_items.GetItemCount());
+			CRY_ASSERT(m_items.GetItemCount() == m_scores.size());
+			CRY_ASSERT(index < m_items.GetItemCount());
 
 			void* pItem = m_items.GetItemAtIndex(index);
 			float score = m_scores[index];
 			return SResultSetEntry(pItem, score);
 		}
 
-		void CQueryResultSet::SetItemFactoryAndCreateItems(Client::IItemFactory& itemFactory, size_t numItemsToCreate)
+		const CQueryResultSet& CQueryResultSet::GetImplementation() const
 		{
-			assert(!m_pItemFactory);
-
-			m_pItemFactory = &itemFactory;
-			m_items.SetItemFactory(itemFactory);
-
-			m_items.CreateItemsByItemFactory(numItemsToCreate);
-			m_scores.resize(numItemsToCreate);
+			return *this;
 		}
 
-		void CQueryResultSet::SetItemAndScore(size_t index, const void* pSourceItem, float score)
+		const CItemList& CQueryResultSet::GetItemList() const
 		{
-			assert(m_pItemFactory);
-			assert(m_items.GetItemCount() == m_scores.size());
-			assert(index < m_items.GetItemCount());
-
-			void* pTargetItem = m_items.GetItemAtIndex(index);
-			m_pItemFactory->CopyItem(pTargetItem, pSourceItem);
-			m_scores[index] = score;
+			return m_items;
 		}
 
 		void CQueryResultSet::DeleteSelf()

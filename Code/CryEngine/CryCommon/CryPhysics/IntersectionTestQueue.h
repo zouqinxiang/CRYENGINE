@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #ifndef __IntersectionTestQueue_h__
 #define __IntersectionTestQueue_h__
@@ -8,6 +8,7 @@
 #include <type_traits>
 #include <CryCore/StlUtils.h>
 #include "DeferredActionQueue.h"
+#include <CryPhysics/physinterface.h>
 
 struct IntersectionTestResult
 {

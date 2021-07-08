@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "FlowFrameworkBaseNode.h"
@@ -85,7 +85,7 @@ public:
 
 		if (pPresetsHelp[0] == 0)
 		{
-			cry_strcpy(pPresetsHelp, "Preset input values. When this is used, all parameter inputs are ignored.\n");
+			cry_fixed_size_strcpy(pPresetsHelp, "Preset input values. When this is used, all parameter inputs are ignored.\n");
 			for (int i = 0; i < NUM_PRESETS; i++)
 			{
 				char buf[300];
@@ -100,7 +100,7 @@ public:
 		static char pPresetsEnumDef[100] = "";
 		if (pPresetsEnumDef[0] == 0)
 		{
-			cry_strcpy(pPresetsEnumDef, "enum_int:NoPreset=0,");
+			cry_fixed_size_strcpy(pPresetsEnumDef, "enum_int:NoPreset=0,");
 			for (int i = 0; i < NUM_PRESETS; i++)
 			{
 				char buf[100];

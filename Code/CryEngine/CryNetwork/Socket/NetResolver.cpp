@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "NetResolver.h"
@@ -97,7 +97,7 @@ private:
 template<>
 void CResolverToNumericStringVisitor::VisitVariant<stl::variant_size<TNetAddress>::value>(const TNetAddress& var)
 {
-	CRY_ASSERT_MESSAGE(false, "Invalid variant index.");
+	CRY_ASSERT(false, "Invalid variant index.");
 }
 
 class CResolverToNumericStringVisitor_LocalBuffer
@@ -149,7 +149,7 @@ public:
 
 	void Visit(SIPv4Addr addr)
 	{
-		FUNCTION_PROFILER(gEnv->pSystem, PROFILE_NETWORK);
+		CRY_PROFILE_FUNCTION(PROFILE_NETWORK);
 		uint32 a = (addr.addr >> 24) & 0xff;
 		uint32 b = (addr.addr >> 16) & 0xff;
 		uint32 c = (addr.addr >> 8) & 0xff;
@@ -280,7 +280,7 @@ private:
 template<>
 void CResolverToStringVisitor::VisitVariant<stl::variant_size<TNetAddress>::value>(const TNetAddress& var)
 {
-	CRY_ASSERT_MESSAGE(false, "Invalid variant index.");
+	CRY_ASSERT(false, "Invalid variant index.");
 }
 #endif
 
@@ -574,7 +574,7 @@ private:
 template<>
 void CIsPrivateAddrVisitor::VisitVariant<stl::variant_size<TNetAddress>::value>(const TNetAddress& var)
 {
-	CRY_ASSERT_MESSAGE(false, "Invalid variant index.");
+	CRY_ASSERT(false, "Invalid variant index.");
 }
 
 }
@@ -746,7 +746,7 @@ private:
 template<>
 void CConvertAddrVisitor::VisitVariant<stl::variant_size<TNetAddress>::value>(const TNetAddress& var)
 {
-	CRY_ASSERT_MESSAGE(false, "Invalid variant index.");
+	CRY_ASSERT(false, "Invalid variant index.");
 }
 
 bool ConvertAddr(const TNetAddress& addrIn, CRYSOCKADDR* pSockAddr, int* addrLen)

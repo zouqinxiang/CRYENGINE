@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
  -------------------------------------------------------------------------
@@ -20,7 +20,7 @@ CWorldBuilder::CWorldBuilder()
 {
 	if(gEnv->pGameFramework)
 	{
-		CRY_ASSERT_MESSAGE(gEnv->pGameFramework->GetILevelSystem(), "Unable to register as levelsystem listener!");
+		CRY_ASSERT(gEnv->pGameFramework->GetILevelSystem(), "Unable to register as levelsystem listener!");
 		if(gEnv->pGameFramework->GetILevelSystem())
 		{
 			gEnv->pGameFramework->GetILevelSystem()->AddListener(this);
@@ -39,10 +39,11 @@ CWorldBuilder::~CWorldBuilder()
 }
 
 //////////////////////////////////////////////////////////////////////////
-void CWorldBuilder::OnLoadingStart(ILevelInfo *pLevel)
+bool CWorldBuilder::OnLoadingStart(ILevelInfo *pLevel)
 {
 	// reset existing prefabs before loading the level
 	m_PrefabManager.Clear(false);
+	return true;
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -69,12 +70,6 @@ void CWorldBuilder::OnLoadingComplete(ILevelInfo* pLevel)
 		}
 	}
 
-}
-
-//////////////////////////////////////////////////////////////////////////
-void CWorldBuilder::OnUnloadComplete(ILevelInfo* pLevel)
-{
-	return;
 }
 
 //////////////////////////////////////////////////////////////////////////

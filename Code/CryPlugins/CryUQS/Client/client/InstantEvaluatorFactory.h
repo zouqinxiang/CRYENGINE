@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
@@ -17,11 +17,13 @@ namespace UQS
 			//
 			//===================================================================================
 
-			class CInstantEvaluatorFactoryBase : public IInstantEvaluatorFactory, public IParamsHolderFactory, public CFactoryBase<CInstantEvaluatorFactoryBase>
+			class CInstantEvaluatorFactoryBase : public IInstantEvaluatorFactory, public IParamsHolderFactory, public Shared::CFactoryBase<CInstantEvaluatorFactoryBase>
 			{
 			public:
 				// IInstantEvaluatorFactory
 				virtual const char*                      GetName() const override final;
+				virtual const CryGUID&                   GetGUID() const override final;
+				virtual const char*                      GetDescription() const override final;
 				virtual const IInputParameterRegistry&   GetInputParameterRegistry() const override final;
 				virtual IParamsHolderFactory&            GetParamsHolderFactory() const override final;
 				// ~IInstantEvaluatorFactory
@@ -39,17 +41,19 @@ namespace UQS
 				// ~IParamsHolderFactory
 
 			protected:
-				explicit                                 CInstantEvaluatorFactoryBase(const char* szEvaluatorName);
+				explicit                                 CInstantEvaluatorFactoryBase(const char* szEvaluatorName, const CryGUID& guid, const char* szDescription);
 
 			protected:
 				CInputParameterRegistry                  m_inputParameterRegistry;
 
 			private:
+				string                                   m_description;
 				IParamsHolderFactory*                    m_pParamsHolderFactory;      // points to *this; it's a trick to allow GetParamsHolderFactory() return a non-const reference to *this
 			};
 
-			inline CInstantEvaluatorFactoryBase::CInstantEvaluatorFactoryBase(const char* szEvaluatorName)
-				: CFactoryBase(szEvaluatorName)
+			inline CInstantEvaluatorFactoryBase::CInstantEvaluatorFactoryBase(const char* szEvaluatorName, const CryGUID& guid, const char* szDescription)
+				: CFactoryBase(szEvaluatorName, guid)
+				, m_description(szDescription)
 			{
 				m_pParamsHolderFactory = this;
 			}
@@ -57,6 +61,16 @@ namespace UQS
 			inline const char* CInstantEvaluatorFactoryBase::GetName() const
 			{
 				return CFactoryBase::GetName();
+			}
+
+			inline const CryGUID& CInstantEvaluatorFactoryBase::GetGUID() const
+			{
+				return CFactoryBase::GetGUID();
+			}
+
+			inline const char* CInstantEvaluatorFactoryBase::GetDescription() const
+			{
+				return m_description.c_str();
 			}
 
 			inline const IInputParameterRegistry& CInstantEvaluatorFactoryBase::GetInputParameterRegistry() const
@@ -81,7 +95,17 @@ namespace UQS
 		class CInstantEvaluatorFactory final : public Internal::CInstantEvaluatorFactoryBase
 		{
 		public:
-			explicit                             CInstantEvaluatorFactory(const char* szEvaluatorName);
+
+			struct SCtorParams
+			{
+				const char*                      szName = "";
+				CryGUID                          guid = CryGUID::Null();
+				const char*                      szDescription = "";
+			};
+
+		public:
+
+			explicit                             CInstantEvaluatorFactory(const SCtorParams& ctorParams);
 
 			// IInstantEvaluatorFactory
 			virtual ECostCategory                GetCostCategory() const override;
@@ -97,8 +121,8 @@ namespace UQS
 		};
 
 		template <class TInstantEvaluator>
-		CInstantEvaluatorFactory<TInstantEvaluator>::CInstantEvaluatorFactory(const char* szEvaluatorName)
-			: CInstantEvaluatorFactoryBase(szEvaluatorName)
+		CInstantEvaluatorFactory<TInstantEvaluator>::CInstantEvaluatorFactory(const SCtorParams& ctorParams)
+			: CInstantEvaluatorFactoryBase(ctorParams.szName, ctorParams.guid, ctorParams.szDescription)
 		{
 			typedef typename TInstantEvaluator::SParams Params;
 			Params::Expose(m_inputParameterRegistry);

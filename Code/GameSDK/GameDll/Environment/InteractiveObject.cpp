@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
 -------------------------------------------------------------------------
@@ -23,6 +23,7 @@ History:
 
 #include "EntityUtility/EntityScriptCalls.h"
 #include "StatsRecordingMgr.h"
+#include "GameCVars.h"
 
 CInteractiveObjectEx::CInteractiveObjectEx()
 : m_state(eState_NotUsed)
@@ -92,14 +93,14 @@ bool CInteractiveObjectEx::ReloadExtension( IGameObject * pGameObject, const SEn
 {
 	ResetGameObject();
 
-	CRY_ASSERT_MESSAGE(false, "CInteractiveObjectEx::ReloadExtension not implemented");
+	CRY_ASSERT(false, "CInteractiveObjectEx::ReloadExtension not implemented");
 	
 	return false;
 }
 
 bool CInteractiveObjectEx::GetEntityPoolSignature( TSerialize signature )
 {
-	CRY_ASSERT_MESSAGE(false, "CInteractiveObjectEx::GetEntityPoolSignature not implemented");
+	CRY_ASSERT(false, "CInteractiveObjectEx::GetEntityPoolSignature not implemented");
 	
 	return true;
 }
@@ -273,7 +274,7 @@ void CInteractiveObjectEx::HandleEvent( const SGameObjectEvent &goEvent )
 
 }
 
-void CInteractiveObjectEx::ProcessEvent( SEntityEvent &entityEvent )
+void CInteractiveObjectEx::ProcessEvent( const SEntityEvent &entityEvent )
 {
 	switch (entityEvent.event)
 	{
@@ -303,6 +304,11 @@ void CInteractiveObjectEx::ProcessEvent( SEntityEvent &entityEvent )
 		}
 		break;
 	}
+}
+
+Cry::Entity::EventFlags CInteractiveObjectEx::GetEventMask() const
+{
+	return ENTITY_EVENT_RESET | ENTITY_EVENT_ATTACH_THIS | ENTITY_EVENT_XFORM | ENTITY_EVENT_START_LEVEL;
 }
 
 void CInteractiveObjectEx::SetChannelId( uint16 id )
@@ -343,7 +349,7 @@ bool CInteractiveObjectEx::Reset()
 	if (entityProperties->GetValue("Interaction", interactionProperties))
 	{
 		ParseAllInteractions(interactionProperties, interactionNames); 
-		CRY_ASSERT_MESSAGE(interactionNames.size() == m_interactionDataSets.size(), "bool CInteractiveObjectEx::Reset() < Error - differing number of animation names than anim sets");
+		CRY_ASSERT(interactionNames.size() == m_interactionDataSets.size(), "bool CInteractiveObjectEx::Reset() < Error - differing number of animation names than anim sets");
 
 		const char* objectModel = NULL;
 		interactionProperties->GetValue("object_Model", objectModel);

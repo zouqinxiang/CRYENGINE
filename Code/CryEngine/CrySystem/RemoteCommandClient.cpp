@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
    -------------------------------------------------------------------------
@@ -23,21 +23,12 @@
 #endif
 
 //-----------------------------------------------------------------------------
-
-CRemoteCommandClient::Command::Command()
-	: m_refCount(1)
-	, m_szClassName(NULL)
-	, m_id(0)
-{
-}
-
 CRemoteCommandClient::Command::~Command()
 {
 	// Release message buffer with compiled command data
-	if (m_pMessage != NULL)
+	if (m_pMessage)
 	{
 		m_pMessage->Release();
-		m_pMessage = NULL;
 	}
 }
 
@@ -107,12 +98,11 @@ void CRemoteCommandClient::Command::Release()
 //-----------------------------------------------------------------------------
 
 CRemoteCommandClient::Connection::Connection(CRemoteCommandManager* pManager, IServiceNetworkConnection* pConnection, uint32 currentCommandId)
-	: m_pConnection(pConnection)
-	, m_pManager(pManager)
+	: m_pManager(pManager)
+	, m_pConnection(pConnection)
+	, m_remoteAddress(pConnection->GetRemoteAddress())
 	, m_lastReceivedCommand(currentCommandId)
 	, m_lastExecutedCommand(currentCommandId)
-	, m_remoteAddress(pConnection->GetRemoteAddress())
-	, m_refCount(1)
 {
 	// The first thing to do after the connection is initialized is to
 	// send the message with list of classes supported by this side.
@@ -167,9 +157,8 @@ CRemoteCommandClient::Connection::~Connection()
 	m_pCommands.clear();
 
 	// Release all of the raw messages that were not picked up
-	while (!m_pRawMessages.empty())
+	for (IServiceNetworkMessage* pMessage : m_pRawMessages.pop_all())
 	{
-		IServiceNetworkMessage* pMessage = m_pRawMessages.pop();
 		pMessage->Release();
 	}
 
@@ -419,7 +408,7 @@ bool CRemoteCommandClient::Connection::Update()
 						}
 						else
 						{
-							LOG_VERBOSE(3, "Command ID=%d is to big (%d) to fit packet size limit (%d)",
+							LOG_VERBOSE(3, "Command ID=%d is too big (%d) to fit packet size limit (%d)",
 							            commandRef->m_pCommand->GetCommandId(),
 							            commandDataSize,
 							            kCommandMaxMergePacketSize);
@@ -546,7 +535,9 @@ bool CRemoteCommandClient::Connection::SendRawMessage(IServiceNetworkMessage* pM
 
 IServiceNetworkMessage* CRemoteCommandClient::Connection::ReceiveRawMessage()
 {
-	return m_pRawMessages.pop();
+	IServiceNetworkMessage* pMessage = nullptr;
+	m_pRawMessages.try_pop(pMessage);
+	return pMessage;
 }
 
 void CRemoteCommandClient::Connection::AddRef()

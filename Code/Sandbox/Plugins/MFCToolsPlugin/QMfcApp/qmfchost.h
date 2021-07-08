@@ -1,10 +1,11 @@
-// Copyright 2001-2015 Crytek GmbH. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
 
+#include "MFCToolsDefines.h"
 #include "qwinhost.h"
 
-class PLUGIN_API QMfcHost : public QWinHost
+class MFC_TOOLS_PLUGIN_API QMfcHost : public QWinHost
 {
 public:
 	class QMfcHost(QWidget* parent, CWnd* pWnd, bool bNoScale = false, bool deleteWnd = true) : QWinHost(parent)

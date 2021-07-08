@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "GameObjects/GameObject.h"
@@ -101,7 +101,7 @@ bool CWorldQuery::ReloadExtension(IGameObject* pGameObject, const SEntitySpawnPa
 {
 	ResetGameObject();
 
-	CRY_ASSERT_MESSAGE(false, "CWorldQuery::ReloadExtension not implemented");
+	CRY_ASSERT(false, "CWorldQuery::ReloadExtension not implemented");
 
 	return false;
 }

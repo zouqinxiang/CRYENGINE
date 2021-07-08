@@ -1,10 +1,11 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 
 #include "FlowSystem.h"
 
 #include <CryFlowGraph/IFlowBaseNode.h>
+#include <CryRenderer/IRenderAuxGeom.h>
 
 #include "FlowGraph.h"
 #include "Nodes/FlowLogNode.h"
@@ -42,9 +43,7 @@ template<class T>
 class CAutoFlowFactory : public IFlowNodeFactory
 {
 public:
-	CAutoFlowFactory() : m_refs(0) {}
-	void         AddRef()                                     { m_refs++; }
-	void         Release()                                    { if (0 == --m_refs) delete this; }
+	CAutoFlowFactory() {}
 	IFlowNodePtr Create(IFlowNode::SActivationInfo* pActInfo) { return new T(pActInfo); }
 	void         GetMemoryUsage(ICrySizer* s) const
 	{
@@ -53,18 +52,13 @@ public:
 	}
 
 	void Reset() {}
-
-private:
-	int m_refs;
 };
 
 template<class T>
 class CSingletonFlowFactory : public IFlowNodeFactory
 {
 public:
-	CSingletonFlowFactory() : m_refs(0) { m_pInstance = new T(); }
-	void AddRef()  { m_refs++; }
-	void Release() { if (0 == --m_refs) delete this; }
+	CSingletonFlowFactory() { m_pInstance = new T(); }
 	void GetMemoryUsage(ICrySizer* s) const
 	{
 		SIZER_SUBCOMPONENT_NAME(s, "CSingletonFlowFactory");
@@ -80,7 +74,6 @@ public:
 
 private:
 	IFlowNodePtr m_pInstance;
-	int          m_refs;
 };
 
 // FlowSystem Container
@@ -169,6 +162,8 @@ CFlowSystem::CFlowSystem()
 	, m_nextNodeTypeID(InvalidFlowNodeTypeId)
 	, m_bRegisteredDefaultNodes(false)
 {
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
+
 	LoadBlacklistedFlownodeXML();
 
 	m_pGameTokenSystem = new CGameTokenSystem;
@@ -178,6 +173,8 @@ CFlowSystem::CFlowSystem()
 
 void CFlowSystem::PreInit()
 {
+	CRY_PROFILE_FUNCTION(PROFILE_LOADING_ONLY);
+
 	m_pModuleManager = new CFlowGraphModuleManager();
 	RegisterAllNodeTypes();
 
@@ -238,8 +235,12 @@ void CFlowSystem::RegisterAllNodeTypes()
 	m_nextNodeTypeID = InvalidFlowNodeTypeId;
 
 	// register all types
+#if defined(USE_CRY_ASSERT)
 	TFlowNodeTypeId typeId = RegisterType("InvalidType", 0);
 	assert(typeId == InvalidFlowNodeTypeId);
+#else
+	RegisterType("InvalidType", 0);
+#endif
 	RegisterType("Debug:Log", new CSingletonFlowFactory<CFlowLogNode>());
 	RegisterType("Game:Start", new CAutoFlowFactory<CFlowStartNode>());
 	RegisterType("TrackEvent", new CAutoFlowFactory<CFlowTrackEventNode>());
@@ -466,14 +467,15 @@ TFlowNodeTypeId CFlowSystem::RegisterType(const char* type, IFlowNodeFactoryPtr 
 	{
 		// overriding
 		TFlowNodeTypeId nTypeId = iter->second;
+		STypeInfo& typeInfo = m_typeRegistryVec[nTypeId];
 
-		if (!factory->AllowOverride())
+		if (!typeInfo.factory->AllowOverride())
 		{
-			CryFatalError("CFlowSystem::RegisterType: Type '%s' Id=%u already registered. Overriding not allowed by node factory.", type, nTypeId);
+			CryWarning(VALIDATOR_MODULE_FLOWGRAPH, VALIDATOR_WARNING, "CFlowSystem::RegisterType: Type '%s' Id=%u already registered. Overriding not allowed by node factory.", type, nTypeId);
+			return InvalidFlowNodeTypeId;
 		}
 
 		assert(nTypeId < m_typeRegistryVec.size());
-		STypeInfo& typeInfo = m_typeRegistryVec[nTypeId];
 		typeInfo.factory = factory;
 		return nTypeId;
 	}
@@ -536,7 +538,7 @@ void CFlowSystem::Update()
 #endif
 
 	{
-		FRAME_PROFILER("CFlowSystem::Update()", gEnv->pSystem, PROFILE_ACTION);
+		CRY_PROFILE_SECTION(PROFILE_ACTION, "CFlowSystem::Update()");
 		if (m_cVars.m_enableUpdates == 0)
 		{
 			/*
@@ -552,13 +554,13 @@ void CFlowSystem::Update()
 			// call pre updates
 
 			// 1. system inspectors
-			std::for_each(m_systemInspectors.begin(), m_systemInspectors.end(), std::bind2nd(std::mem_fun(&IFlowGraphInspector::PreUpdate), (IFlowGraph*) 0));
+			std::for_each(m_systemInspectors.begin(), m_systemInspectors.end(), [](const IFlowGraphInspectorPtr& ptr) {ptr->PreUpdate(nullptr);});
 
 			// 2. graph inspectors TODO: optimize not to go over all graphs ;-)
 			for (TGraphs::Notifier itGraph(m_graphs); itGraph.IsValid(); itGraph.Next())
 			{
 				const std::vector<IFlowGraphInspectorPtr>& graphInspectors(itGraph->GetInspectors());
-				std::for_each(graphInspectors.begin(), graphInspectors.end(), std::bind2nd(std::mem_fun(&IFlowGraphInspector::PreUpdate), *itGraph));
+				std::for_each(graphInspectors.begin(), graphInspectors.end(), [&itGraph](const IFlowGraphInspectorPtr& ptr) {ptr->PreUpdate(*itGraph);});
 			}
 		}
 
@@ -569,13 +571,13 @@ void CFlowSystem::Update()
 			// call post updates
 
 			// 1. system inspectors
-			std::for_each(m_systemInspectors.begin(), m_systemInspectors.end(), std::bind2nd(std::mem_fun(&IFlowGraphInspector::PostUpdate), (IFlowGraph*) 0));
+			std::for_each(m_systemInspectors.begin(), m_systemInspectors.end(), [](const IFlowGraphInspectorPtr& ptr) {ptr->PostUpdate(nullptr);});
 
 			// 2. graph inspectors TODO: optimize not to go over all graphs ;-)
 			for (TGraphs::Notifier itGraph(m_graphs); itGraph.IsValid(); itGraph.Next())
 			{
 				const std::vector<IFlowGraphInspectorPtr>& graphInspectors(itGraph->GetInspectors());
-				std::for_each(graphInspectors.begin(), graphInspectors.end(), std::bind2nd(std::mem_fun(&IFlowGraphInspector::PostUpdate), *itGraph));
+				std::for_each(graphInspectors.begin(), graphInspectors.end(), [&itGraph](const IFlowGraphInspectorPtr& ptr) {ptr->PostUpdate(*itGraph);});
 			}
 		}
 	}
@@ -587,6 +589,8 @@ void CFlowSystem::Update()
 //////////////////////////////////////////////////////////////////////////
 void CFlowSystem::UpdateGraphs()
 {
+	MEMSTAT_CONTEXT(EMemStatContextType::Other, "CFlowSystem::UpdateGraphs");
+
 	// Determine if graphs should be updated (Debug control)
 	bool bUpdateGraphs = true;
 	PREFAST_SUPPRESS_WARNING(6237);
@@ -662,7 +666,7 @@ void CFlowSystem::Reset(bool unload)
 void CFlowSystem::Init()
 {
 	if (gEnv->pEntitySystem)
-		gEnv->pEntitySystem->AddSink(this, IEntitySystem::OnReused | IEntitySystem::OnSpawn, 0);
+		gEnv->pEntitySystem->AddSink(this, IEntitySystem::OnReused | IEntitySystem::OnSpawn);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -767,7 +771,7 @@ void CFlowSystem::RegisterEntityTypes()
 		INDENT_LOG_DURING_SCOPE(true, "Flow system is registering entity type '%s'", classname.c_str());
 
 		// if the entity lua script does not have input/outputs defined, and there is already an FG node defined for that entity in c++, do not register the empty lua one
-		if (pEntityClass->GetEventCount() == 0 || GetTypeId(classname) != InvalidFlowNodeTypeId)
+		if (pEntityClass->GetEventCount() == 0 && GetTypeId(classname) != InvalidFlowNodeTypeId)
 			continue;
 
 		RegisterType(classname, new CFlowEntityClass(pEntityClass));
@@ -879,7 +883,7 @@ void CFlowSystem::OnEntityClassRegistryEvent(EEntityClassRegistryEvent event, co
 			IEntityClass* pClass = const_cast<IEntityClass*>(pEntityClass);
 			
 			// if the entity lua script does not have input/outputs defined, and there is already an FG node defined for that entity in c++, do not register the empty lua one
-			if (pClass->GetEventCount() == 0 || GetTypeId(className) != InvalidFlowNodeTypeId)
+			if (pClass->GetEventCount() == 0 && GetTypeId(className) != InvalidFlowNodeTypeId)
 				return;
 
 			RegisterType(className, new CFlowEntityClass(pClass));

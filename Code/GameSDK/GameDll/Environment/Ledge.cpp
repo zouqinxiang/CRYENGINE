@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "Ledge.h"
@@ -191,14 +191,14 @@ bool CLedgeObject::ReloadExtension( IGameObject * pGameObject, const SEntitySpaw
 	ResetGameObject();
 	Ledge::RegisterEvents( *this, *pGameObject );
 
-	CRY_ASSERT_MESSAGE(false, "CLedgeObject::ReloadExtension not implemented");
+	CRY_ASSERT(false, "CLedgeObject::ReloadExtension not implemented");
 
 	return false;
 }
 
 bool CLedgeObject::GetEntityPoolSignature( TSerialize signature )
 {
-	CRY_ASSERT_MESSAGE(false, "CLedgeObject::GetEntityPoolSignature not implemented");
+	CRY_ASSERT(false, "CLedgeObject::GetEntityPoolSignature not implemented");
 
 	return true;
 }
@@ -224,7 +224,7 @@ void CLedgeObject::HandleEvent( const SGameObjectEvent& gameObjectEvent )
 	}
 }
 
-void CLedgeObject::ProcessEvent( SEntityEvent& entityEvent )
+void CLedgeObject::ProcessEvent( const SEntityEvent& entityEvent )
 {
 	switch( entityEvent.event )
 	{
@@ -241,6 +241,11 @@ void CLedgeObject::ProcessEvent( SEntityEvent& entityEvent )
 		}
 		break;
 	}
+}
+
+Cry::Entity::EventFlags CLedgeObject::GetEventMask() const
+{
+	return ENTITY_EVENT_XFORM | ENTITY_EVENT_EDITOR_PROPERTY_CHANGED;
 }
 
 void CLedgeObject::GetMemoryUsage( ICrySizer *pSizer ) const
@@ -354,7 +359,7 @@ void CLedgeObject::ComputeLedgeMarkers()
 
 CLedgeObjectStatic::CLedgeObjectStatic()
 {
-	CRY_ASSERT_MESSAGE( gEnv->IsEditor(), "Static ledge object should  only be instantiated in the editor!" );
+	CRY_ASSERT( gEnv->IsEditor(), "Static ledge object should  only be instantiated in the editor!" );
 }
 
 CLedgeObjectStatic::~CLedgeObjectStatic()

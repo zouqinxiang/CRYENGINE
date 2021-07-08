@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
 -------------------------------------------------------------------------
@@ -48,7 +48,7 @@ IMPLEMENT_OPERATORS(PLANT_PARAMS_MEMBERS, SPlantParams)
 
 void SAIDescriptor::Reset(const XmlNodeRef& paramsNode, bool defaultInit)
 {
-	FUNCTION_PROFILER(GetISystem(), PROFILE_GAME);
+	CRY_PROFILE_FUNCTION(PROFILE_GAME);
 
 	if (paramsNode)
 	{
@@ -92,7 +92,7 @@ void SAIDescriptor::Reset(const XmlNodeRef& paramsNode, bool defaultInit)
 
 void SHazardDescriptor::Reset(const XmlNodeRef& paramsNode, bool defaultInit)
 {
-	FUNCTION_PROFILER(GetISystem(), PROFILE_GAME);
+	CRY_PROFILE_FUNCTION(PROFILE_GAME);
 
 	m_DefinedFlag = false;
 
@@ -106,10 +106,10 @@ void SHazardDescriptor::Reset(const XmlNodeRef& paramsNode, bool defaultInit)
 		paramsNode->getAttr("maxHazardApproxPosDeviation", descriptor.maxHazardApproxPosDeviation);
 		paramsNode->getAttr("maxHazardApproxAngleDeviationDeg", descriptor.maxHazardApproxAngleDeviationDeg);
 
-		CRY_ASSERT_MESSAGE(descriptor.maxHazardDistance >= 0.0f, "maxHazardDistance must be >= 0.0f!");
-		CRY_ASSERT_MESSAGE(descriptor.hazardRadius >= 0.0f, "hazardRadius must be >= 0.0f!");
-		CRY_ASSERT_MESSAGE(descriptor.maxHazardApproxPosDeviation >= 0.0f, "maxHazardApproxPosDeviation must be >= 0.0f!");
-		CRY_ASSERT_MESSAGE(descriptor.maxHazardApproxAngleDeviationDeg >= 0.0f, "maxHazardApproxAngleDeviationDeg must be >= 0.0f!");
+		CRY_ASSERT(descriptor.maxHazardDistance >= 0.0f, "maxHazardDistance must be >= 0.0f!");
+		CRY_ASSERT(descriptor.hazardRadius >= 0.0f, "hazardRadius must be >= 0.0f!");
+		CRY_ASSERT(descriptor.maxHazardApproxPosDeviation >= 0.0f, "maxHazardApproxPosDeviation must be >= 0.0f!");
+		CRY_ASSERT(descriptor.maxHazardApproxAngleDeviationDeg >= 0.0f, "maxHazardApproxAngleDeviationDeg must be >= 0.0f!");
 	}
 }
 

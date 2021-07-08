@@ -1,10 +1,11 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #ifndef __MNM_VOXELIZER_H
 #define __MNM_VOXELIZER_H
 
 #pragma once
 
+#include "MNMDebugDefines.h"
 #include "DynamicSpanGrid.h"
 
 namespace MNM

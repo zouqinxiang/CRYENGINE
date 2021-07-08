@@ -1,10 +1,10 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /************************************************************************
 
 A null implementation of the Dynamic Response System, that does nothing. Just a stub, if a real implementation was not provided or failed to initialize
 
-/************************************************************************/
+************************************************************************/
 
 #pragma once
 

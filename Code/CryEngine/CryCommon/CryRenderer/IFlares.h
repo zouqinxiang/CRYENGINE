@@ -1,22 +1,20 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #pragma once
-////////////////////////////////////////////////////////////////////////////
-// -------------------------------------------------------------------------
-//  File name:   IFlares.h
-//  Created:     8/12/2011
-////////////////////////////////////////////////////////////////////////////
+
 #include <CrySandbox/IFuncVariable.h> // <> required for Interfuscator
 #include <CrySystem/XML/IXml.h>       // <> required for Interfuscator
 #include <CryCore/smartptr.h>
+#include <CryCore/Containers/CryArray.h>
 
-struct IShader;
 class CCamera;
-struct SRenderingPassInfo;
+class CRenderView;
+struct IShader;
 
 class __MFPA
 {
 };
+
 class __MFPB
 {
 };
@@ -97,10 +95,10 @@ private:
 
 struct SLensFlareRenderParam
 {
-	SLensFlareRenderParam(CCamera* pCamera, IShader* pShader, const SRenderingPassInfo& passInfo) :
+	SLensFlareRenderParam(CCamera* pCamera, IShader* pShader, CRenderView* pRenderView) :
 		pCamera(pCamera),
 		pShader(pShader),
-		passInfo(passInfo)
+		pRenderView(pRenderView)
 	{
 	}
 	~SLensFlareRenderParam(){}
@@ -110,7 +108,7 @@ struct SLensFlareRenderParam
 	}
 	CCamera* pCamera;
 	IShader* pShader;
-	const SRenderingPassInfo& passInfo;
+	CRenderView* pRenderView;
 };
 
 class ISoftOcclusionQuery
@@ -138,13 +136,13 @@ public:
 	void Release()
 	{
 		if (CryInterlockedDecrement(&m_nRefCount) <= 0)
-			delete this;
+			DeleteThis();
 	}
 
 	// <interfuscator:shuffle>
 	virtual EFlareType          GetType() = 0;
 	virtual bool                IsGroup() const = 0;
-	virtual string              GetName() const = 0;
+	virtual const char*         GetName() const = 0;
 	virtual void                SetName(const char* ch_name) = 0;
 	virtual void                Load(IXmlNode* pNode) = 0;
 
@@ -164,7 +162,7 @@ public:
 	virtual void                GetMemoryUsage(ICrySizer* pSizer) const = 0;
 	virtual void                Invalidate() = 0;
 
-	virtual void                RenderPreview(SLensFlareRenderParam* pParam, const Vec3& vPos) = 0;
+	virtual void                RenderPreview(const SLensFlareRenderParam* pParam, const Vec3& vPos) = 0;
 
 	virtual void                SetOpticsReference(IOpticsElementBase* pReference) {}
 	virtual IOpticsElementBase* GetOpticsReference() const                         { return NULL; }
@@ -174,13 +172,15 @@ public:
 	virtual DynArray<FuncVariableGroup> GetEditorParamGroups() = 0;
 #endif
 
+protected:
+	virtual void                DeleteThis() = 0;
+
 private:
 	volatile int m_nRefCount;
 };
 
-class IOpticsManager
+struct IOpticsManager
 {
-public:
 	// <interfuscator:shuffle>
 	virtual ~IOpticsManager(){}
 	virtual void                Reset() = 0;

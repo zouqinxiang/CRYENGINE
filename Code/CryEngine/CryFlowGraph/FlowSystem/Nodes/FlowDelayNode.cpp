@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "FlowDelayNode.h"
@@ -76,9 +76,9 @@ void CFlowDelayNode::Serialize(SActivationInfo* pActInfo, TSerialize ser)
 			// we can directly read into the m_activations array
 			// regular update is handled by CFlowGraph
 			ser.Value("m_activations", m_activations);
-			Activations::iterator iter = m_activations.begin();
 #if 0
 			CryLogAlways("CDelayNode read: current time(ms): %f", curTime.GetMilliSeconds());
+			Activations::iterator iter = m_activations.begin();
 			while (iter != m_activations.end())
 			{
 				CryLogAlways("CDelayNode read: ms=%d  timevalue(ms): %f", (*iter).first, (*iter).second.m_timeout.GetMilliSeconds());
@@ -154,7 +154,7 @@ void CFlowDelayNode::ProcessEvent(EFlowEvent event, SActivationInfo* pActInfo)
 					m_activations.clear();
 				const float delay = GetDelayTime(pActInfo);
 				CTimeValue finishTime = gEnv->pTimer->GetFrameStartTime() + delay;
-				m_activations[(int)finishTime.GetMilliSeconds()] = SDelayData(finishTime, pActInfo->pInputPorts[0]);
+				m_activations[(int)finishTime.GetMilliSeconds()] = SDelayData(finishTime, GetPortAny(pActInfo, 0));
 				pActInfo->pGraph->SetRegularlyUpdated(pActInfo->myID, true);
 			}
 			else
@@ -173,7 +173,7 @@ void CFlowDelayNode::ProcessEvent(EFlowEvent event, SActivationInfo* pActInfo)
 				CTimeValue finishTime = gEnv->pTimer->GetFrameStartTime() + delay;
 				IGameFramework::TimerID timerId = gEnv->pGameFramework->AddTimer(delay, false, functor(CFlowDelayNode::OnTimer),
 				                                                                       this);
-				m_activations[timerId] = SDelayData(finishTime, pActInfo->pInputPorts[0]);
+				m_activations[timerId] = SDelayData(finishTime, GetPortAny(pActInfo, 0));
 			}
 			break;
 		}
@@ -308,7 +308,7 @@ public:
 			if (IsPortActive(pActInfo, 0))
 			{
 				pActInfo->pGraph->SetRegularlyUpdated(pActInfo->myID, true);
-				m_InputData = pActInfo->pInputPorts[0];
+				m_InputData = GetPortAny(pActInfo, 0);
 				m_frameStamp = gEnv->nMainFrameID;
 			}
 			break;

@@ -1,273 +1,195 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "ParticleCommon.h"
 #include "ParticleAttributes.h"
-#include "ParticleMath.h"
-
-CRY_PFX2_DBG
+#include "ParticleEffect.h"
+#include <CrySerialization/CryName.h>
+#include <CrySerialization/Decorators/ActionButton.h>
 
 namespace pfx2
 {
 
-SERIALIZATION_ENUM_IMPLEMENT(EAttributeType);
-SERIALIZATION_ENUM_IMPLEMENT(EAttributeScope);
+
+#pragma warning(disable: 4800) // 'int': forcing value to bool 'true' or 'false'
 
 namespace
 {
-
-
 	const uint numTypes = IParticleAttributes::ET_Count;
-	typedef CAttributeInstance::SData(*TAttribConverterFn)(CAttributeInstance::SData);
-	typedef std::array<std::array<TAttribConverterFn, numTypes>, numTypes> TAttributeConverterTable;
+	typedef IParticleAttributes::TValue (*TAttribConverterFn)(const IParticleAttributes::TValue&);
 
-
-
-	CAttributeInstance::SData ConvertAttrib_Bypass(CAttributeInstance::SData data)
+	template<typename TIn, typename TOut>
+	IParticleAttributes::TValue ConvertAttrib(const IParticleAttributes::TValue& data)
 	{
-		return data;
+		return TOut(data.get<TIn>());
 	}
 
-	CAttributeInstance::SData ConvertAttrib_BoolToInt(CAttributeInstance::SData data)
+	template<typename TIn, typename TMid, typename TOut>
+	IParticleAttributes::TValue ConvertAttr3(const IParticleAttributes::TValue& data)
 	{
-		data.m_asInt = data.m_asBool ? 1 : 0;
-		return data;
-	}
-	CAttributeInstance::SData ConvertAttrib_BoolToFloat(CAttributeInstance::SData data)
-	{
-		data.m_asFloat = data.m_asBool ? 1.0f : 0.0f;
-		return data;
-	}
-	CAttributeInstance::SData ConvertAttrib_BoolToColor(CAttributeInstance::SData data)
-	{
-		data.m_asColor.r = data.m_asColor.g = data.m_asColor.b = data.m_asBool ? 0xff : 0x00;
-		data.m_asColor.a = 0xff;
-		return data;
+		return TOut(TMid(data.get<TIn>()));
 	}
 
-	CAttributeInstance::SData ConvertAttrib_IntToBool(CAttributeInstance::SData data)
+	// A specialized color type, with built-in conversion to/from other attribute types
+	struct ColorAttr : ColorB
 	{
-		data.m_asBool = data.m_asInt > 0 ? true : false;
-		return data;
-	}
-	CAttributeInstance::SData ConvertAttrib_IntToFloat(CAttributeInstance::SData data)
-	{
-		data.m_asFloat = float(data.m_asInt);
-		return data;
-	}
-	CAttributeInstance::SData ConvertAttrib_IntToColor(CAttributeInstance::SData data)
-	{
-		data.m_asColor.r = data.m_asColor.g = data.m_asColor.b = uint8(CLAMP(data.m_asInt, 0, 0xff));
-		data.m_asColor.a = 0xff;
-		return data;
-	}
+		ColorAttr(ColorB in)   : ColorB(in) {}
+		ColorAttr(bool in)     { r = g = b = in ? 0xff : 0x00; a = 0xff; }
+		ColorAttr(int in)      { r = g = b = crymath::clamp(in, 0, 0xff); a = 0xff; }
+		ColorAttr(float in)    { r = g = b = float_to_ufrac8(in); a = 0xff; }
 
-	CAttributeInstance::SData ConvertAttrib_FloatToBool(CAttributeInstance::SData data)
-	{
-		data.m_asBool = data.m_asFloat > 0.0f ? true : false;
-		return data;
-	}
-	CAttributeInstance::SData ConvertAttrib_FloatToInt(CAttributeInstance::SData data)
-	{
-		data.m_asInt = int(data.m_asFloat);
-		return data;
-	}
-	CAttributeInstance::SData ConvertAttrib_FloatToColor(CAttributeInstance::SData data)
-	{
-		data.m_asColor.r = data.m_asColor.g = data.m_asColor.b = uint8(SATURATE(data.m_asFloat)*255);
-		data.m_asColor.a = 0xff;
-		return data;
-	}
+		operator bool() const  { return r + g + b > 0; }
+		operator int() const   { return int_round(Luminance()); }
+		operator float() const { return Luminance() / 255.0f; }
+	};
 
-	float Brightness(ColorB color)
+	TAttribConverterFn s_AttributeConverterTable[numTypes][numTypes] =
 	{
-		return (color.r * 0.299f + color.g * 0.587f + color.b * 0.114f) / 255.0f;
-	}
-	CAttributeInstance::SData ConvertAttrib_ColorToBool(CAttributeInstance::SData data)
+		{ ConvertAttrib<bool, bool>      , ConvertAttrib<bool, int>      , ConvertAttrib<bool, float>      , ConvertAttr3<bool, ColorAttr, ColorB>   },
+		{ ConvertAttrib<int, bool>       , ConvertAttrib<int, int>       , ConvertAttrib<int, float>       , ConvertAttr3<int, ColorAttr, ColorB>    },
+		{ ConvertAttrib<float, bool>     , ConvertAttrib<float, int>     , ConvertAttrib<float, float>     , ConvertAttr3<float, ColorAttr, ColorB>  },
+		{ ConvertAttr3<ColorB, ColorAttr, bool> , ConvertAttr3<ColorB, ColorAttr, int> , ConvertAttr3<ColorB, ColorAttr, float> , ConvertAttrib<ColorB, ColorB> }
+	};
+	
+	struct AttributeEditSerializer
 	{
-		data.m_asBool = Brightness(data.m_asColor) > 0.0f ? true : false;
-		return data;
-	}
-	CAttributeInstance::SData ConvertAttrib_ColorToInt(CAttributeInstance::SData data)
-	{
-		data.m_asInt = int(Brightness(data.m_asColor) * 255.0f);
-		return data;
-	}
-	CAttributeInstance::SData ConvertAttrib_ColorToFloat(CAttributeInstance::SData data)
-	{
-		data.m_asFloat = Brightness(data.m_asColor);
-		return data;
-	}
+		CAttributeInstance* m_pAttributes;
+		uint                m_index;
 
-
-
-	const TAttributeConverterTable& GetAttribConverterTable()
-	{
-		static TAttributeConverterTable table;
-		static bool filled = false;
-		if (!filled)
+		void Serialize(IArchive& ar)
 		{
-			for (auto& it : table)
-				it.fill(ConvertAttrib_Bypass);
-			table[IParticleAttributes::ET_Boolean] = { { ConvertAttrib_Bypass      , ConvertAttrib_BoolToInt  , ConvertAttrib_BoolToFloat  , ConvertAttrib_BoolToColor } };
-			table[IParticleAttributes::ET_Integer] = { { ConvertAttrib_IntToBool   , ConvertAttrib_Bypass     , ConvertAttrib_IntToFloat   , ConvertAttrib_IntToColor } };
-			table[IParticleAttributes::ET_Float]   = { { ConvertAttrib_FloatToBool , ConvertAttrib_FloatToInt , ConvertAttrib_Bypass       , ConvertAttrib_FloatToColor } };
-			table[IParticleAttributes::ET_Color]   = { { ConvertAttrib_ColorToBool , ConvertAttrib_ColorToInt , ConvertAttrib_ColorToFloat , ConvertAttrib_Bypass } };
-			filled = true;
+			const SAttributeDesc& desc = m_pAttributes->GetDesc(m_index);
+			auto value = m_pAttributes->GetValue(m_index);
+
+			value.Serialize(ar, desc.GetType(), "Value", "^");
+			if (ar.isInput())
+				m_pAttributes->SetValue(m_index, value);
+
+			bool edited = value != desc.m_defaultValue;
+			ar(Serialization::ActionButton(*this), "Reset", edited ? "^Reset" : "!^Reset");
+
 		}
-
-		return table;
-	}
-
-
+		// Reset function
+		void operator()() const
+		{
+			m_pAttributes->ResetValue(m_index);
+		}
+	};
 }
 
-
-SAttribute::SAttribute()
-	: m_type(EAttributeType::Float)
-	, m_scope(EAttributeScope::PerEmitter)
-	, m_asColor(~0u)
-	, m_asInt(0)
-	, m_minInt(0)
-	, m_maxInt(10)
-	, m_asFloat(1.0f)
-	, m_minFloat(0.0f)
-	, m_maxFloat(1.0f)
-	, m_asBoolean(true)
-	, m_useMin(false)
-	, m_useMax(false)
+void SAttributeDesc::Serialize(IArchive& ar)
 {
-}
+	ar(m_name, "Name", "Name");
+	m_defaultValue.Serialize(ar);
 
-void SAttribute::Serialize(Serialization::IArchive& ar)
-{
-	ar(m_type, "Type", "^>85>");
-	ar(m_name, "Name", "^");
-	ar(m_scope, "Scope", "Scope");
-	switch (m_type)
+	if (m_defaultValue.get_if<int>())
 	{
-	case EAttributeType::Boolean:
-		ar(m_asBoolean, "Value", "^");
-		break;
-	case EAttributeType::Integer:
-		ar(m_asInt, "Value", "^");
-		ar(m_useMin, "UseMin", "Use Min");
-		ar(m_useMax, "UseMax", "Use Max");
-		if (m_useMin)
-			ar(m_minInt, "MinValue", "Minimum Value");
-		if (m_useMax)
-			ar(m_maxInt, "MaxValue", "Maximum Value");
-		break;
-	case EAttributeType::Float:
-		ar(m_asFloat, "Value", "^");
-		ar(m_useMin, "UseMin", "Use Min");
-		ar(m_useMax, "UseMax", "Use Max");
-		if (m_useMin)
-			ar(m_minFloat, "MinValue", "Minimum Value");
-		if (m_useMax)
-			ar(m_maxFloat, "MaxValue", "Maximum Value");
-		break;
-	case EAttributeType::Color:
-		ar(m_asColor, "Value", "^");
-		break;
+		ar(m_minInt, "MinValue", "Minimum Value");
+		ar(m_maxInt, "MaxValue", "Maximum Value");
+	}
+	else if (m_defaultValue.get_if<float>())
+	{
+		ar(m_minFloat, "MinValue", "Minimum Value");
+		ar(m_maxFloat, "MaxValue", "Maximum Value");
 	}
 }
 
+int CAttributeTable::FindAttributeIdByName(const CCryName& name) const
+{
+	return stl::find_index_if(m_attributes,
+		[&name](const SAttributeDesc& attr)
+		{
+			return attr.m_name == name;
+		});
+}
+
 //////////////////////////////////////////////////////////////////////////
 
-void CAttributeTable::Serialize(Serialization::IArchive& ar)
+void CAttributeTable::Serialize(IArchive& ar)
 {
+	CRY_PFX2_PROFILE_DETAIL;
 	ar(m_attributes, "Attributes", "Attributes");
+	if (ar.isInput())
+	{
+		m_enumDesc = yasli::EnumDescription(yasli::TypeID::get<CAttributeTable>());
+		int i = -1;
+		m_enumDesc.add(i++, "", "");
+		for (const auto& attr : m_attributes)
+			m_enumDesc.add(i++, attr.m_name.c_str(), attr.m_name.c_str());
+	}
+}
+
+bool CAttributeTable::SerializeName(IArchive& ar, CCryName& value, cstr name, cstr label) const
+{
+	if (ar.isEdit())
+	{
+		if (m_enumDesc.count())
+		{
+			int attributeId = FindAttributeIdByName(value);
+			if (!m_enumDesc.serialize(ar, attributeId, name, label))
+				return false;
+			value = attributeId >= 0 ? m_attributes[attributeId].m_name : CCryName();
+			return true;
+		}
+	}
+	return ar(value, name, label);
 }
 
 //////////////////////////////////////////////////////////////////////////
 
-CAttributeInstance::CAttributeInstance()
+void SAttributeEdit::Serialize(IArchive& ar)
 {
+	SERIALIZE_VAR(ar, m_name);
+	SERIALIZE_VAR(ar, m_value);
 }
 
-void CAttributeInstance::Reset(IParticleAttributes* pCopySource)
+//////////////////////////////////////////////////////////////////////////
+
+void CAttributeInstance::Reset(const IParticleAttributes* pCopySource)
 {
 	if (!pCopySource)
 	{
-		m_attributeIndices.clear();
-		m_data.clear();
-		m_attributeIndices.shrink_to_fit();
-		m_data.shrink_to_fit();
+		m_attributesEdit.clear();
 		m_pAttributeTable.reset();
 	}
 	else
 	{
-		CAttributeInstance* pCCopySource = static_cast<CAttributeInstance*>(pCopySource);
-		m_attributeIndices = pCCopySource->m_attributeIndices;
-		m_data = pCCopySource->m_data;
-		m_attributeIndices = pCCopySource->m_attributeIndices;
+		const CAttributeInstance* pCCopySource = static_cast<const CAttributeInstance*>(pCopySource);
+		m_attributesEdit = pCCopySource->m_attributesEdit;
 		m_pAttributeTable = pCCopySource->m_pAttributeTable;
 	}
+	m_changed = true;
 }
 
-void CAttributeInstance::Reset(TAttributeTablePtr pTable, EAttributeScope scope)
+void CAttributeInstance::Reset(TAttributeTablePtr pTable)
 {
 	CRY_PFX2_ASSERT(pTable != nullptr);
 
-	m_pAttributeTable = pTable;
-
-	m_attributeIndices.clear();
-	m_data.clear();
-
-	for (size_t i = 0; i < pTable->GetNumAttributes(); ++i)
+	if (m_pAttributeTable.lock() != pTable)
 	{
-		const SAttribute& attribute = pTable->GetAttribute(i);
-	//	if (attribute.m_scope != scope)
-	//		continue;
-
-		SData data;
-		switch (attribute.m_type)
-		{
-		case EAttributeType::Boolean:
-			data.m_asBool = attribute.m_asBoolean;
-			break;
-		case EAttributeType::Integer:
-			data.m_asInt = attribute.m_asInt;
-			break;
-		case EAttributeType::Float:
-			data.m_asFloat = attribute.m_asFloat;
-			break;
-		case EAttributeType::Color:
-			data.m_asColor = attribute.m_asColor;
-			break;
-		}
-
-		m_attributeIndices.push_back(i);
-		m_data.push_back(data);
+		m_pAttributeTable = pTable;
+		m_changed = true;
 	}
 }
 
-void CAttributeInstance::Serialize(Serialization::IArchive& ar)
+void CAttributeInstance::Serialize(IArchive& ar)
 {
-	for (uint attributeId = 0; attributeId < m_attributeIndices.size(); ++attributeId)
+	if (!ar.isEdit())
 	{
-		const SAttribute& attribute = GetAttribute(attributeId);
-		const auto type = IParticleAttributes::EType(attribute.m_type);
-		SData data = GetAttribute(TAttributeId(attributeId), SData(), type);
-		switch (attribute.m_type)
-		{
-		case EAttributeType::Boolean:
-			ar(data.m_asBool, attribute.m_name.c_str(), attribute.m_name.c_str());
-			break;
-		case EAttributeType::Integer:
-			ar(data.m_asInt, attribute.m_name.c_str(), attribute.m_name.c_str());
-			break;
-		case EAttributeType::Float:
-			ar(data.m_asFloat, attribute.m_name.c_str(), attribute.m_name.c_str());
-			break;
-		case EAttributeType::Color:
-			ar(data.m_asColor, attribute.m_name.c_str(), attribute.m_name.c_str());
-			break;
-		}
-		if (ar.isInput())
-			SetAttribute(TAttributeId(attributeId), data, type);
+		ar(m_attributesEdit, "Attributes", "Attributes");
 	}
+	else
+	{
+		uint numAttributes = GetNumAttributes();
+		for (uint attributeId = 0; attributeId < numAttributes; ++attributeId)
+		{
+			const SAttributeDesc& attribute = GetDesc(attributeId);
+			const char* name = attribute.m_name.c_str();
+			ar(AttributeEditSerializer{ this, attributeId }, name, name);
+		}
+	}
+	if (ar.isInput())
+		m_changed = true;
 }
 
 void CAttributeInstance::TransferInto(IParticleAttributes* pReceiver) const
@@ -277,163 +199,129 @@ void CAttributeInstance::TransferInto(IParticleAttributes* pReceiver) const
 	auto pSourceTable = m_pAttributeTable.lock();
 	CRY_PFX2_ASSERT(pSourceTable); // this instance over-lived the table
 
-	if (pReceiverTable != pSourceTable)
+	pCReceiver->m_pAttributeTable = m_pAttributeTable;
+
+	// Merge existing edits
+	for (const auto& edit : m_attributesEdit)
 	{
-		pCReceiver->m_pAttributeTable = m_pAttributeTable;
-		pCReceiver->m_attributeIndices = m_attributeIndices;
-		pCReceiver->m_data = m_data;
-	}
-	else if (pCReceiver->m_attributeIndices.size() < m_attributeIndices.size())
-	{
-		pCReceiver->m_attributeIndices.insert(
-			pCReceiver->m_attributeIndices.end(),
-			m_attributeIndices.begin() + pCReceiver->m_attributeIndices.size(),
-			m_attributeIndices.end());
-		pCReceiver->m_data.insert(
-			pCReceiver->m_data.end(),
-			m_data.begin() + pCReceiver->m_data.size(),
-			m_data.end());
-	}
-	else
-	{
-		pCReceiver->m_attributeIndices.resize(m_attributeIndices.size());
-		pCReceiver->m_data.resize(m_data.size());
+		if (pCReceiver->FindAttributeIdByName(edit.m_name) == gInvalidId)
+			pCReceiver->AddAttribute(edit);
 	}
 }
 
-auto CAttributeInstance::FindAttributeIdByName(cstr name) const->TAttributeId
+auto CAttributeInstance::FindAttributeIdByName(const CCryName& name) const->TAttributeId
 {
-	auto pAttributeTable = m_pAttributeTable.lock();
-	CRY_PFX2_ASSERT(pAttributeTable); // this instance over-lived the table
-
-	auto it = std::find_if(
-	  m_attributeIndices.begin(), m_attributeIndices.end(),
-	  [pAttributeTable, name](const uint entryIndex)
-		{
-			const SAttribute& attribute = pAttributeTable->GetAttribute(entryIndex);
-			return strcmp(name, attribute.m_name.c_str()) == 0;
-	  });
-	if (it == m_attributeIndices.end())
-		return gInvalidId;
-	return TAttributeId(it - m_attributeIndices.begin());
+	if (auto pAttributeTable = m_pAttributeTable.lock())
+		return pAttributeTable->FindAttributeIdByName(name);
+	return gInvalidId;
 }
 
 uint CAttributeInstance::GetNumAttributes() const
 {
-	return uint(m_attributeIndices.size());
+	if (auto pAttributeTable = m_pAttributeTable.lock())
+		return pAttributeTable->GetNumAttributes();
+	return 0;
 }
 
-cstr CAttributeInstance::GetAttributeName(uint idx) const
+cstr CAttributeInstance::GetAttributeName(uint id) const
 {
-	if (idx >= m_attributeIndices.size())
-		return nullptr;
-	return GetAttribute(m_attributeIndices[idx]).m_name.c_str();
+	return GetDesc(id).m_name.c_str();
 }
 
-auto CAttributeInstance::GetAttributeType(uint idx) const->EType
+auto CAttributeInstance::GetAttributeType(uint id) const->EType
 {
-	if (idx >= m_attributeIndices.size())
-		return ET_Float;
-	return EType(GetAttribute(m_attributeIndices[idx]).m_type);
+	return (EType)GetDesc(id).GetType();
 }
 
-const SAttribute& CAttributeInstance::GetAttribute(TAttributeId attributeId) const
+const SAttributeDesc& CAttributeInstance::GetDesc(uint id) const
 {
-	auto pAttributeTable = m_pAttributeTable.lock();
-	CRY_PFX2_ASSERT(pAttributeTable); // this instance over-lived the table
-	CRY_PFX2_ASSERT(attributeId < m_attributeIndices.size());
-	const uint entryIndex = m_attributeIndices[attributeId];
-	const SAttribute& attribute = pAttributeTable->GetAttribute(entryIndex);
-	return attribute;
-}
-
-void CAttributeInstance::SetAsBoolean(TAttributeId id, bool value)
-{
-	SetAttribute(id, SData(value), IParticleAttributes::ET_Boolean);
-}
-
-bool CAttributeInstance::GetAsBoolean(TAttributeId id, bool defaultValue) const
-{
-	return GetAttribute(id, SData(defaultValue), IParticleAttributes::ET_Boolean).m_asBool;
-}
-
-int CAttributeInstance::SetAsInteger(TAttributeId id, int value)
-{
-	return SetAttribute(id, SData(value), IParticleAttributes::ET_Integer).m_asInt;
-}
-
-int CAttributeInstance::GetAsInteger(TAttributeId id, int defaultValue) const
-{
-	return GetAttribute(id, SData(defaultValue), IParticleAttributes::ET_Integer).m_asInt;
-}
-
-float CAttributeInstance::SetAsFloat(TAttributeId id, float value)
-{
-	return SetAttribute(id, SData(value), IParticleAttributes::ET_Float).m_asFloat;
-}
-
-float CAttributeInstance::GetAsFloat(TAttributeId id, float defaultValue) const
-{
-	return GetAttribute(id, SData(defaultValue), IParticleAttributes::ET_Float).m_asFloat;
-}
-
-void CAttributeInstance::SetAsColor(TAttributeId id, ColorB value)
-{
-	SetAttribute(id, SData(value), IParticleAttributes::ET_Color);
-}
-
-void CAttributeInstance::SetAsColor(TAttributeId id, ColorF value)
-{
-	SetAsColor(id, ColorB(value));
-}
-
-ColorB CAttributeInstance::GetAsColorB(TAttributeId id, ColorB defaultValue) const
-{
-	return GetAttribute(id, SData(defaultValue), IParticleAttributes::ET_Color).m_asColor;
-}
-
-ColorF CAttributeInstance::GetAsColorF(TAttributeId id, ColorF defaultValue) const
-{
-	const ColorB color = GetAsColorB(id, ColorB(defaultValue));
-	return ColorF(color.pack_abgr8888());
-}
-
-CAttributeInstance::SData CAttributeInstance::SetAttribute(TAttributeId id, const CAttributeInstance::SData& input, IParticleAttributes::EType type)
-{
-	const SAttribute& attribute = GetAttribute(id);
-	const TAttributeConverterTable& table = GetAttribConverterTable();
-	TAttribConverterFn converter = table[uint(type)][uint(attribute.m_type)];
-	SData output = converter(input);
-
-	switch (attribute.m_type)
+	if (auto pAttributeTable = m_pAttributeTable.lock())
 	{
-	case EAttributeType::Integer:
-		if (attribute.m_useMin)
-			output.m_asInt = max(attribute.m_minInt, output.m_asInt);
-		if (attribute.m_useMax)
-			output.m_asInt = min(attribute.m_maxInt, output.m_asInt);
-		break;
-	case EAttributeType::Float:
-		if (attribute.m_useMin)
-			output.m_asFloat = max(attribute.m_minFloat, output.m_asFloat);
-		if (attribute.m_useMax)
-			output.m_asFloat = min(attribute.m_maxFloat, output.m_asFloat);
-		break;
+		if (id < pAttributeTable->GetNumAttributes())
+			return pAttributeTable->GetAttribute(id);
+	}
+	static SAttributeDesc emptyDesc;
+	return emptyDesc;
+}
+
+SAttributeEdit* CAttributeInstance::FindEditById(TAttributeId id)
+{
+	const CCryName& name = GetDesc(id).m_name;
+	const int editId = stl::find_index_if(m_attributesEdit, [&name](const SAttributeEdit& edit)
+	{
+		return edit.m_name == name;
+	});
+	return editId >= 0 ? &m_attributesEdit[editId] : nullptr;
+}
+
+auto CAttributeInstance::GetValue(TAttributeId id) const -> const TValue&
+{
+	if (const auto* pEdit = FindEditById(id))
+		return pEdit->m_value;
+	return GetDesc(id).m_defaultValue;
+}
+
+auto CAttributeInstance::GetValue(TAttributeId id, const TValue& defaultValue) const -> TValue
+{
+	if (id >= GetNumAttributes())
+		return defaultValue;
+
+	const TValue& value = GetValue(id);
+	TAttribConverterFn converter = s_AttributeConverterTable[value.index()][defaultValue.index()];
+	return converter(value);
+}
+
+bool CAttributeInstance::SetValue(TAttributeId id, const TValue& input)
+{
+	if (id >= GetNumAttributes())
+		return false;
+
+	const SAttributeDesc& desc = GetDesc(id);
+	TAttribConverterFn converter = s_AttributeConverterTable[input.index()][(uint)desc.GetType()];
+	TValue output = converter(input);
+
+	if (output.get_if<int>())
+	{
+		output = max(+desc.m_minInt, output.get<int>());
+		output = min(+desc.m_maxInt, output.get<int>());
+	}
+	else if (output.get_if<float>())
+	{
+		output = max(+desc.m_minFloat, output.get<float>());
+		output = min(+desc.m_maxFloat, output.get<float>());
 	}
 
-	m_data[id] = output;
-
-	return output;
+	if (auto* pEdit = FindEditById(id))
+		pEdit->m_value = output;
+	else
+		m_attributesEdit.emplace_back(GetDesc(id).m_name, output);
+	m_changed = true;
+	return true;
 }
 
-CAttributeInstance::SData CAttributeInstance::GetAttribute(TAttributeId id, const SData& defaultValue, IParticleAttributes::EType type) const
+void CAttributeInstance::ResetValue(TAttributeId id)
 {
-	if (id == gInvalidId)
-		return defaultValue;
-	const SAttribute& attribute = GetAttribute(id);
-	const TAttributeConverterTable& table = GetAttribConverterTable();
-	TAttribConverterFn converter = table[uint(attribute.m_type)][uint(type)];
-	return converter(m_data[id]);
+	const CCryName& name = GetDesc(id).m_name;
+	stl::find_and_erase_if(m_attributesEdit, [&name](const SAttributeEdit& edit)
+	{
+		return edit.m_name == name;
+	});
+	m_changed = true;
+}
+
+bool CAttributeReference::Serialize(Serialization::IArchive& ar, cstr name, cstr label)
+{
+	if (!ar.isEdit())
+		return ar(m_name, name, label);
+	else if (auto* pComponent = ar.context<IParticleComponent>())
+	{
+		if (auto* pEffect = static_cast<CParticleComponent*>(pComponent)->GetEffect())
+		{
+			const auto& attributes = pEffect->GetAttributeTable();
+			return attributes->SerializeName(ar, m_name, name, label);
+		}
+	}
+	return false;
 }
 
 }

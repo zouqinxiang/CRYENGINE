@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 
@@ -6,6 +6,7 @@
 #include <CryCore/Platform/platform_impl.inl>
 
 #include <CrySystem/IEngineModule.h>
+#include <CrySystem/SystemInitParams.h>
 #include <CryExtension/ICryFactory.h>
 #include <CryExtension/ClassWeaver.h>
 
@@ -32,7 +33,7 @@ class CEngineModule_CryInput : public IInputEngineModule
 		CRYINTERFACE_ADD(IInputEngineModule)
 	CRYINTERFACE_END()
 
-	CRYGENERATE_SINGLETONCLASS(CEngineModule_CryInput, "EngineModule_CryInput", 0x3cc0516071bb44f6, 0xae525949f30277f9)
+	CRYGENERATE_SINGLETONCLASS_GUID(CEngineModule_CryInput, "EngineModule_CryInput", "3cc05160-71bb-44f6-ae52-5949f30277f9"_cry_guid)
 
 	virtual ~CEngineModule_CryInput() {}
 
@@ -43,25 +44,27 @@ class CEngineModule_CryInput : public IInputEngineModule
 	//////////////////////////////////////////////////////////////////////////
 	virtual bool Initialize(SSystemGlobalEnvironment& env, const SSystemInitParams& initParams) override
 	{
-		ISystem* pSystem = env.pSystem;
+		IInput* pInput = nullptr;
 
-		IInput* pInput = 0;
-		if (!gEnv->IsDedicated())
+		//Specific input systems only make sense in 'normal' mode when renderer is on
+		if (gEnv->pRenderer)
 		{
 #if defined(USE_DXINPUT)
-			pInput = new CDXInput(pSystem, (HWND) initParams.hWnd);
+			pInput = new CDXInput(env.pSystem);
 #elif defined(USE_DURANGOINPUT)
-			pInput = new CDurangoInput(pSystem);
+			pInput = new CDurangoInput(env.pSystem);
 #elif defined(USE_LINUXINPUT)
-			pInput = new CLinuxInput(pSystem);
+			pInput = new CLinuxInput(env.pSystem);
 #elif defined(USE_ORBIS_INPUT)
-			pInput = new COrbisInput(pSystem);
+			pInput = new COrbisInput(env.pSystem);
 #else
 			pInput = new CBaseInput();
 #endif
 		}
 		else
+		{
 			pInput = new CBaseInput();
+		}
 
 		if (!pInput->Init())
 		{

@@ -1,13 +1,16 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "System.h"
 #include "PhysRenderer.h"
 #include <CryRenderer/IRenderAuxGeom.h>
 #include <CryEntitySystem/IEntity.h>
+#include <CryEntitySystem/IEntitySystem.h>
 #include <Cry3DEngine/IRenderNode.h>
 #include <Cry3DEngine/IStatObj.h>
+#include <CryPhysics/IPhysics.h>
 
+#pragma warning(push)
 #pragma warning(disable: 4244)
 
 ColorB CPhysRenderer::g_colorTab[9] = {
@@ -18,6 +21,7 @@ ColorB CPhysRenderer::g_colorTab[9] = {
 CPhysRenderer::CPhysRenderer()
 	: m_cullDist(100.0f)
 	, m_wireframeDist(40.0f)
+	, m_meridianDist(0.0f)
 	, m_timeRayFadein(0.2f)
 	, m_rayPeakTime(0.0f)
 	, m_maxTris(200)
@@ -97,10 +101,12 @@ const char* CPhysRenderer::GetPhysForeignName(void* pForeignData, int iForeignDa
 	if (iForeignData == PHYS_FOREIGN_ID_FOLIAGE)
 		return "**foliage rope**";
 	if (iForeignData == PHYS_FOREIGN_ID_ROPE)
-		if (IEntity* pEntity = gEnv->pEntitySystem->GetEntity(((IRopeRenderNode*)pForeignData)->GetEntityOwner()))
+	{
+		if (IEntity* pEntity = (((IRopeRenderNode*)pForeignData)->GetOwnerEntity()))
 			return pEntity->GetName();
 		else
 			return "Rope";
+	}
 	if (iForeignData == PHYS_FOREIGN_ID_RIGID_PARTICLE)
 		return *((IStatObj*)pForeignData)->GetGeoName() ? ((IStatObj*)pForeignData)->GetGeoName() : ((IStatObj*)pForeignData)->GetFilePath();
 
@@ -109,13 +115,23 @@ const char* CPhysRenderer::GetPhysForeignName(void* pForeignData, int iForeignDa
 	return "[Static]";
 }
 
-void CPhysRenderer::DrawGeometry(IGeometry* pGeom, geom_world_data* pgwd, int idxColor, int bSlowFadein, const Vec3& sweepDir)
+void CPhysRenderer::DrawGeometry(IGeometry* pGeom, geom_world_data* pgwd, int idxColor, int bSlowFadein, const Vec3& sweepDir, const ColorF& color)
 {
 	WriteLock lock(m_lockDrawGeometry);
 	if (!bSlowFadein)
 	{
-		ColorB clr = g_colorTab[idxColor & 7];
-		clr.a >>= idxColor >> 8;
+		ColorB clr;
+
+		if (!isneg(idxColor))
+		{
+			clr = g_colorTab[idxColor & 7];
+			clr.a >>= idxColor >> 8;
+		}
+		else
+		{
+			clr = color;
+		}
+
 		DrawGeometry(pGeom, pgwd, clr);
 	}
 	else
@@ -204,43 +220,28 @@ void CPhysRenderer::DrawFrame(const Vec3& pnt, const Vec3* axes, const float sca
 	renderFlags.SetDepthTestFlag(e_DepthTestOn);
 	renderFlags.SetDrawInFrontMode(e_DrawInFrontOff);
 	renderFlags.SetAlphaBlendMode(e_AlphaNone);
+	renderFlags.SetCullMode(e_CullModeNone);
 	aux->SetRenderFlags(renderFlags);
 
 	ColorB clr[3] = { ColorB(255, 0, 0), ColorB(0, 255, 0), ColorB(0, 0, 255) };
-	float fclr[4][4] = {
-		{ 1.f, 0.f, 0.f, 1.f }, { 0.f, 1.f, 0.f, 1.f }, { 0.f, 0.f, 1.f, 1.f }, { 1.f, 1.f, 1.f, 1.f }
-	};
-	char str[128];
-	const unsigned int num_arc_pnts = 12;
-	Vec3 arc_pnts[num_arc_pnts];
 
 	for (int j = 0; j < 3; ++j)
-	{
-		aux->DrawLine(pnt, clr[j], pnt + axes[j] * scale, clr[j], 1.f);
-		aux->DrawCone(pnt + axes[j] * scale, axes[j], 0.001f, 0.01f, clr[j]);
-		if (limits && (axes_locked & (1 << j)))
+		if (axes_locked & 1 << j)
 		{
-			Quat qmin, qmax;
-			qmin.SetRotationAA(limits[0][j], axes[j]);
-			qmax.SetRotationAA(limits[1][j], axes[j]);
-			Vec3 p1 = pnt + (axes[inc_mod3[j]] * qmin);
-			Vec3 p2 = pnt + (axes[inc_mod3[j]] * qmax);
-			Vec3 p1_dir = (p1 - pnt).GetNormalized() * scale;
-			Vec3 p2_dir = (p2 - pnt).GetNormalized() * scale;
-
-			cry_sprintf(str, "%.1f", RAD2DEG(limits[0][j]));
-			IRenderAuxText::DrawLabelEx(pnt + p1_dir, 1.5f, fclr[j], true, true, str);
-			cry_sprintf(str, "%.1f", RAD2DEG(limits[1][j]));
-			IRenderAuxText::DrawLabelEx(pnt + p2_dir, 1.5f, fclr[j], true, true, str);
-
-			arc_pnts[0] = p1_dir;
-			for (int k = 1; k < num_arc_pnts; ++k)
+			float lim[2] = { max(-gf_PI*2, limits[0][j]), min(gf_PI*2, limits[1][j]) };
+			const float step = 0.2f;
+			float cosa, sina, cstep = 0.499f * step / max(0.001f, lim[1] - lim[0]);
+			sincos_tpl(step, &sina, &cosa);
+			// axes0 is conventionally the "twist", aka "prinpical" axis for a bone
+			// use axes0 to show rotation ranges around axes1 and 2, and axes1 for rotation around axes0
+			Vec3 axort = axes[((j | j >> 1) & 1) ^ 1], axis = axort.GetRotated(axes[j], lim[0]), axis1;
+			for(float a = lim[0], c = 0.5f; a < lim[1]; a += step, axis = axis1, c += cstep)
 			{
-				arc_pnts[k] = Vec3::CreateSlerp(p1_dir, p2_dir, float(k + 1) / num_arc_pnts).GetNormalized() * scale;
-				aux->DrawTriangle(pnt, clr[j], pnt + arc_pnts[k - 1], clr[j], pnt + arc_pnts[k], clr[j]);
+				axis1 = a + step < lim[1] ? axis.GetRotated(axes[j], cosa, sina) : axort.GetRotated(axes[j], lim[1]);
+				ColorB cb = ColorB(ColorF(clr[j]) * c);
+				aux->DrawTriangle(pnt, cb, pnt + axis * scale, cb, pnt + axis1 * scale, cb);
 			}
 		}
-	}
 
 	aux->SetRenderFlags(oldFlags);
 }
@@ -370,10 +371,6 @@ void CPhysRenderer::DrawGeometry(int itype, const void* pGeomData, geom_world_da
 	primitives::box bbox;
 	ColorB clrlit[4], clr = clr0;
 	IRenderAuxGeom* aux = IRenderAuxGeom::GetAux();
-	SAuxGeomRenderFlags rflags = aux->GetRenderFlags();
-	EAuxGeomPublicRenderflags_DrawInFrontMode difmode = rflags.GetDrawInFrontMode();
-	rflags.SetDrawInFrontMode(e_DrawInFrontOn);
-	aux->SetRenderFlags(rflags);
 	int i, j;
 #define FIAT_LUX(color)                                                                                                  \
   t = (n * ldir0) * -0.5f; l = t + fabs_tpl(t); t = (n * ldir1) * -0.1f; l += t + fabs_tpl(t); l = min(1.0f, l + 0.05f); \
@@ -508,6 +505,22 @@ void CPhysRenderer::DrawGeometry(int itype, const void* pGeomData, geom_world_da
 			primitives::sphere* psph = (primitives::sphere*)pGeomData;
 			if (pgwd->iStartNode >= 0 || (pgwd->offset - campos * (1.0f / 3)).len2() < sqr(pgwd->iStartNode))
 				aux->DrawSphere(pgwd->offset + pgwd->R * psph->center * pgwd->scale, psph->r * pgwd->scale, clr);
+			center = R * psph->center * scale + pos;
+			if (psph->r * pgwd->scale >= 0.1f && (center * 3 - campos).len2() < sqr(m_meridianDist) * 9)
+			{
+				const float cos15 = 0.96592582f, sin15 = 0.25881904f;
+				for(j = 0; j < 3; j++)
+				{
+					Vec3 pt[2] = { Vec3(ZERO), Vec3(ZERO) };
+					pt[0][j] = 1;
+					float x = cos15, y = sin15, t;
+					for (i = 0; i < 24; i++, t = x, x = x * cos15 - y * sin15, y = y * cos15 + t * sin15, pt[0] = pt[1])
+					{
+						pt[1][j] = x; pt[1][incm3(j)] = y;
+						aux->DrawLine(center + R * pt[0] * psph->r * pgwd->scale, clr, center + R * pt[1] * psph->r * pgwd->scale, clr);
+					}
+				}
+			}
 			if (sweepDir.len2() > 0)
 			{
 				pgwd->offset += sweepDir * 0.5f;
@@ -531,7 +544,7 @@ void CPhysRenderer::DrawGeometry(int itype, const void* pGeomData, geom_world_da
 			float x, y;
 			Vec3 axes[3];
 			axes[2] = R * pcyl->axis;
-			axes[0] = axes[2].GetOrthogonal().normalized();
+			axes[0] = R * pcyl->axis.GetOrthogonal().normalized();
 			axes[1] = axes[2] ^ axes[0];
 			center = R * pcyl->center * scale + pos;
 			pt[0] = pt[2] = center + axes[0] * (pcyl->r * scale);
@@ -555,6 +568,10 @@ void CPhysRenderer::DrawGeometry(int itype, const void* pGeomData, geom_world_da
 				x = x * cos15 - y * sin15;
 				y = y * cos15 + t * sin15;
 			}
+			if ((center * 3 - campos).len2() < sqr(m_meridianDist) * 9)
+				for(i = 0; i < 4; i++)
+					aux->DrawLine(center + axes[i & 1] * pcyl->r * scale + axes[2] * ((i & 2) - 1), clr, center - axes[i & 1] * pcyl->r * scale + axes[2] * ((i & 2) - 1), clr);
+
 			if (sweepDir.len2() > 0)
 			{
 				assert(pgwd);
@@ -605,9 +622,10 @@ void CPhysRenderer::DrawGeometry(int itype, const void* pGeomData, geom_world_da
 				Vec3 axes[3], haxis, nxy;
 				int icap;
 				axes[2] = R * pcyl->axis;
-				axes[0] = axes[2].GetOrthogonal().normalized();
+				axes[0] = R * pcyl->axis.GetOrthogonal().normalized();
 				axes[1] = axes[2] ^ axes[0];
 				center = R * pcyl->center * scale + pos;
+				bool drawMeridians = (center * 3 - campos).len2() < sqr(m_meridianDist) * 9;
 				pt[0] = pt[2] = center + axes[0] * (pcyl->r * scale);
 				haxis = axes[2] * (pcyl->hh * scale);
 				n = axes[0];
@@ -643,6 +661,13 @@ void CPhysRenderer::DrawGeometry(int itype, const void* pGeomData, geom_world_da
 							pt[1] = center + haxis + n * (pcyl->r * scale);
 							aux->DrawTriangle(pt[0], clrlit[0], pt[1 + icap], clrlit[1 + icap], pt[2 - icap], clrlit[2 - icap]);
 							aux->DrawTriangle(pt[1], clrlit[1], pt[3 - icap], clrlit[3 - icap], pt[2 + icap], clrlit[2 + icap]);
+							if (drawMeridians)
+							{
+								if (min(fabs(x), fabs(y)) < 0.001f)
+									aux->DrawLine(pt[0], clr, pt[2], clr);
+								if (j == 0)
+									aux->DrawLine(pt[0], clr, pt[1], clr);
+							}
 							t = x;
 							x = x * cos15 - y * sin15;
 							y = y * cos15 + t * sin15;
@@ -675,6 +700,6 @@ void CPhysRenderer::DrawGeometry(int itype, const void* pGeomData, geom_world_da
 			break;
 		}
 	}
-	rflags.SetDrawInFrontMode(difmode);
-	aux->SetRenderFlags(rflags);
 }
+
+#pragma warning(pop)

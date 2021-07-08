@@ -1,3 +1,5 @@
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
+
 #include "StdAfx.h"
 #ifdef INCLUDE_SCALEFORM_SDK
 	#include "ScaleformHelper.h"
@@ -14,7 +16,7 @@ class CEngineModule_ScaleformHelper : public IScaleformHelperEngineModule
 		CRYINTERFACE_ADD(Cry::IDefaultModule)
 		CRYINTERFACE_ADD(IScaleformHelperEngineModule)
 	CRYINTERFACE_END()
-	CRYGENERATE_SINGLETONCLASS(CEngineModule_ScaleformHelper, "EngineModule_ScaleformHelper", 0x3d38f12a521d43cf, 0xca18fd1fa7ea5020)
+	CRYGENERATE_SINGLETONCLASS_GUID(CEngineModule_ScaleformHelper, "EngineModule_ScaleformHelper", "3d38f12a-521d-43cf-ca18-fd1fa7ea5020"_cry_guid)
 
 	virtual ~CEngineModule_ScaleformHelper() {}
 

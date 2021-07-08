@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "PlayerStateSwim.h"
@@ -57,10 +57,7 @@ CPlayerStateSwim::CPlayerStateSwim()
 	, m_onSurface(false)
 	, m_bStillDiving(false)
 {
-	if (m_submersionDepthParam == CryAudio::InvalidControlId)
-	{
-		gEnv->pAudioSystem->GetAudioParameterId("submersion_depth", m_submersionDepthParam);
-	}
+	m_submersionDepthParam = CryAudio::StringToId("submersion_depth");
 }
 
 bool CPlayerStateSwim::OnPrePhysicsUpdate(CPlayer& player, const SActorFrameMovementParams& movement, float frameTime)
@@ -69,15 +66,16 @@ bool CPlayerStateSwim::OnPrePhysicsUpdate(CPlayer& player, const SActorFrameMove
 
 	CPlayerStateUtil::PhySetFly(player);
 
-	const SPlayerStats& stats = player.m_stats;
-
 #ifdef STATE_DEBUG
 	const bool debug = (g_pGameCVars->cl_debugSwimming != 0);
 #endif
 
 	const Vec3 entityPos = player.GetEntity()->GetWorldPos();
+
+#ifdef STATE_DEBUG
 	const Quat baseQuat = player.GetBaseQuat();
 	const Vec3 vRight(baseQuat.GetColumn0());
+#endif
 
 	Vec3 velocity = player.GetActorPhysics().velocity;
 
@@ -329,7 +327,7 @@ void CPlayerStateSwim::OnExit(CPlayer& player)
 
 	if (player.IsClient())
 	{
-		//check if the camera still exists 
+		//check if the camera still exists
 		if (player.m_playerCamera != nullptr)
 		{
 			player.GetPlayerCamera()->SetCameraMode(eCameraMode_Default, "Leaving swim state");
@@ -423,7 +421,7 @@ void CPlayerStateSwim::UpdateAudio(CPlayer const& player)
 		if (fabs_tpl(submersionDepth - m_previousSubmersionDepth) > 0.1f || submersionDepth == 0.0f)
 		{
 			m_previousSubmersionDepth = submersionDepth;
-			gEnv->pAudioSystem->SetParameter(m_submersionDepthParam, submersionDepth);
+			gEnv->pAudioSystem->SetParameterGlobally(m_submersionDepthParam, submersionDepth);
 		}
 	}
 }

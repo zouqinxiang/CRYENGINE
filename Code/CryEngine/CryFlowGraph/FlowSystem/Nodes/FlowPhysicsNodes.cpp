@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 
@@ -7,6 +7,7 @@
 #include <CryAISystem/IAgent.h>
 #include <CryAISystem/IAIObject.h>
 #include <CryFlowGraph/IFlowBaseNode.h>
+#include <Cry3DEngine/ISurfaceType.h>
 
 class CFlowNode_Dynamics : public CFlowBaseNode<eNCT_Singleton>
 {
@@ -684,7 +685,7 @@ public:
 		{
 			EntityId skipEntityId = GetPortEntityId(pActInfo, IGNORED_ENTITY);
 			ray_hit hit;
-			CCamera& cam = GetISystem()->GetViewCamera();
+			const CCamera& cam = GetISystem()->GetViewCamera();
 			Vec3 pos = cam.GetPosition();
 			Vec3 direction = cam.GetViewdir();
 			IPhysicalWorld * pWorld = gEnv->pPhysicalWorld;
@@ -885,23 +886,25 @@ public:
 					goto CreateCam;
 				return 0;
 			}
-			pab.qHostPivot = !pHost->GetRotation() * Quat(Matrix33(GetISystem()->GetViewCamera().GetMatrix()));
+			const CCamera& cam = GetISystem()->GetViewCamera();
+			pab.posHostPivot = (cam.GetPosition() - pHost->GetPos()) * pHost->GetRotation();
+			pab.qHostPivot = !pHost->GetRotation() * Quat(Matrix33(cam.GetMatrix()));
 			pCam->GetPhysics()->SetParams(&pab);
 			return pCam;
 		}
 		else if (bCreate)
 		{
 CreateCam:
-			CCamera& cam = GetISystem()->GetViewCamera();
+			const CCamera& cam = GetISystem()->GetViewCamera();
 			Quat qcam = Quat(Matrix33(cam.GetMatrix()));
 			SEntitySpawnParams esp;
 			esp.sName = "CameraProxy";
 			esp.nFlags = 0;
-			esp.pClass = gEnv->pEntitySystem->GetClassRegistry()->FindClass("Default");
+			esp.pClass = gEnv->pEntitySystem->GetClassRegistry()->GetDefaultClass();
 			IEntity* pCam = gEnv->pEntitySystem->SpawnEntity(esp);
 			pCam->SetPos(cam.GetPosition());
 			pCam->SetRotation(qcam);
-			pHost->AddEntityLink("CameraProxy", pCam->GetId());
+			pHost->AddEntityLink("CameraProxy", pCam->GetId(),pCam->GetGuid());
 			SEntityPhysicalizeParams epp;
 			epp.type = PE_ARTICULATED;
 			pCam->Physicalize(epp);
@@ -921,6 +924,8 @@ CreateCam:
 			pCam->GetPhysics()->SetParams(&pp);
 			pab.pHost = pHost->GetPhysics();
 			pab.posHostPivot = (cam.GetPosition() - pHost->GetPos()) * pHost->GetRotation();
+			if (pab.posHostPivot.len2() > 100)
+				pab.posHostPivot = Vec3(0, 0, 1.7f);
 			pab.qHostPivot = !pHost->GetRotation() * qcam;
 			pCam->GetPhysics()->SetParams(&pab);
 			return pCam;
@@ -1170,7 +1175,7 @@ public:
 				if (m_id == -2)
 					m_id = id;
 				ActivateOutput(pActInfo, OUT_ID, id);
-				if (!is_unused(aac.maxPullForce || !is_unused(aac.maxBendTorque)) && !(aac.flags & constraint_no_tears))
+				if ((!is_unused(aac.maxPullForce) || !is_unused(aac.maxBendTorque)) && !(aac.flags & constraint_no_tears))
 				{
 					if (!pRec)
 						pRec = new SConstraintRec;
@@ -1515,50 +1520,44 @@ Flags=12,CarWheel=13,SoftBody=14,Velocity=15,PartFlags=16,AutoDetachment=20,Coll
 	{
 		if (event == eFE_Activate && IsPortActive(pActInfo, IN_SET) && pActInfo->pEntity && pActInfo->pEntity->GetPhysics())
 		{
-			HSCRIPTFUNCTION SetParams = 0;
-			IScriptTable* pEntityTable = pActInfo->pEntity->GetScriptTable();
-			if (pEntityTable->GetValue("SetPhysicParams", SetParams) && SetParams)
+			static IScriptTable* pParams = 0;
+			if (!pParams)
+				(pParams = gEnv->pScriptSystem->CreateTable())->AddRef();
+			pParams->Clear();
+			for (int i = 0; i < 10; i++)
 			{
-				static IScriptTable* pParams = 0;
-				if (!pParams)
-					(pParams = gEnv->pScriptSystem->CreateTable())->AddRef();
-				pParams->Clear();
-				for (int i = 0; i < 10; i++)
+				string name = GetPortString(pActInfo, IN_NAME0 + i * 2);
+				if (name.empty())
+					continue;
+				switch (GetPortType(pActInfo, IN_VAL0 + i * 2))
 				{
-					string name = GetPortString(pActInfo, IN_NAME0 + i * 2);
-					if (name.empty())
-						continue;
-					switch (GetPortType(pActInfo, IN_VAL0 + i * 2))
-					{
-					case eFDT_Int:
-						pParams->SetValue(name, GetPortInt(pActInfo, IN_VAL0 + i * 2));
-						break;
-					case eFDT_Float:
-						pParams->SetValue(name, GetPortFloat(pActInfo, IN_VAL0 + i * 2));
-						break;
-					case eFDT_EntityId:
-						pParams->SetValue(name, GetPortEntityId(pActInfo, IN_VAL0 + i * 2));
-						break;
-					case eFDT_Vec3:
-						pParams->SetValue(name, GetPortVec3(pActInfo, IN_VAL0 + i * 2));
-						break;
-					case eFDT_Bool:
-						pParams->SetValue(name, GetPortBool(pActInfo, IN_VAL0 + i * 2) ? 1 : 0);
-						break;
-					case eFDT_String:
-						pParams->SetValue(name, GetPortString(pActInfo, IN_VAL0 + i * 2).c_str());
-						break;
-					}
+				case eFDT_Int:
+					pParams->SetValue(name, GetPortInt(pActInfo, IN_VAL0 + i * 2));
+					break;
+				case eFDT_Float:
+					pParams->SetValue(name, GetPortFloat(pActInfo, IN_VAL0 + i * 2));
+					break;
+				case eFDT_EntityId:
+					pParams->SetValue(name, GetPortEntityId(pActInfo, IN_VAL0 + i * 2));
+					break;
+				case eFDT_Vec3:
+					pParams->SetValue(name, GetPortVec3(pActInfo, IN_VAL0 + i * 2));
+					break;
+				case eFDT_Bool:
+					pParams->SetValue(name, GetPortBool(pActInfo, IN_VAL0 + i * 2) ? 1 : 0);
+					break;
+				case eFDT_String:
+					pParams->SetValue(name, GetPortString(pActInfo, IN_VAL0 + i * 2).c_str());
+					break;
 				}
-				gEnv->pScriptSystem->BeginCall(SetParams);
-				gEnv->pScriptSystem->PushFuncParam(pEntityTable);
-				gEnv->pScriptSystem->PushFuncParam(GetPortInt(pActInfo, IN_TYPE));
-				gEnv->pScriptSystem->PushFuncParam(pParams);
-				int res;
-				gEnv->pScriptSystem->EndCall(res);
-				gEnv->pScriptSystem->ReleaseFunc(SetParams);
-				ActivateOutput(pActInfo, 0, res);
 			}
+			IEntityScriptComponent *pScript0 = pActInfo->pEntity->GetComponent<IEntityScriptComponent>(), *pScript = pScript0;
+			if (!pScript)
+				pScript = pActInfo->pEntity->CreateComponent<IEntityScriptComponent>();
+			pScript->SetPhysParams(GetPortInt(pActInfo, IN_TYPE), pParams);
+			if (!pScript0)
+				pActInfo->pEntity->RemoveComponent(pScript);
+			ActivateOutput(pActInfo, 0, 0);
 		}
 	}
 };
@@ -1629,7 +1628,7 @@ public:
 						SEntitySpawnParams esp;
 						esp.sName = "SkeletonTmp";
 						esp.nFlags = ENTITY_FLAG_NO_SAVE | ENTITY_FLAG_CLIENT_ONLY | ENTITY_FLAG_PROCEDURAL | ENTITY_FLAG_SPAWNED;
-						esp.pClass = gEnv->pEntitySystem->GetClassRegistry()->FindClass("Default");
+						esp.pClass = gEnv->pEntitySystem->GetClassRegistry()->GetDefaultClass();
 						esp.vPosition = sp.pos;
 						esp.qRotation = sp.q;
 						pSkel = gEnv->pEntitySystem->SpawnEntity(esp);
@@ -1639,7 +1638,7 @@ public:
 						pent->SetParams(&pfd); // revert the changes done in AssignPhysicalEntity
 						pent->SetParams(&pf);
 						if (g_mapSkels.empty())
-							gEnv->pEntitySystem->AddSink(this, IEntitySystem::OnRemove, 0);
+							gEnv->pEntitySystem->AddSink(this, IEntitySystem::OnRemove);
 						g_mapSkels.emplace(id, pSkel);
 					}
 					ActivateOutput(pActInfo, OUT_SKEL_ENT, pSkel->GetId());
@@ -1649,7 +1648,7 @@ public:
 	virtual bool OnBeforeSpawn(SEntitySpawnParams& params) { return true; }
 	virtual void OnSpawn(IEntity* pEntity, SEntitySpawnParams& params) {}
 	virtual void OnReused(IEntity* pEntity, SEntitySpawnParams& params) {}
-	virtual void OnEvent(IEntity* pEntity, SEntityEvent& event) {}
+	virtual void OnEvent(IEntity* pEntity, const SEntityEvent& event) {}
 	virtual bool OnRemove(IEntity* pEntity) 
 	{
 		if (pEntity->GetFlags() & ENTITY_FLAG_PROCEDURAL)
@@ -1742,7 +1741,15 @@ public:
 					(params = gEnv->pScriptSystem->CreateTable())->AddRef();
 				params->Clear();
 				for(int i=1; m_inputs[i].name; i++)
-					if (m_activeMask & 1ull << (i-1))
+				{
+					bool non0 = false;
+					switch (GetPortType(pActInfo, i))
+					{
+						case eFDT_Int    : non0 = !!GetPortInt(pActInfo, i); break;
+						case eFDT_Float  : non0 = !!GetPortFloat(pActInfo, i); break;
+						case eFDT_Vec3   : non0 = !!GetPortVec3(pActInfo, i).len2(); break;
+					}
+					if (m_activeMask & 1ull << (i-1) || non0)
 						switch (GetPortType(pActInfo, i))
 						{
 							case eFDT_Int    : params->SetValue(m_params[i-1], GetPortInt(pActInfo, i)); break;
@@ -1751,7 +1758,14 @@ public:
 							case eFDT_Bool   : params->SetValue(m_params[i-1], GetPortBool(pActInfo, i)); break;
 							case eFDT_String : params->SetValue(m_params[i-1], GetPortString(pActInfo, i).c_str()); break;
 						}
-				pActInfo->pEntity->GetComponent<IEntityScriptComponent>()->SetPhysParams(m_type+1, params);
+				}
+				IEntityScriptComponent *pScript0 = pActInfo->pEntity->GetComponent<IEntityScriptComponent>(), *pScript = pScript0;
+				if (!pScript)
+					pScript = pActInfo->pEntity->CreateComponent<IEntityScriptComponent>();
+				pScript->SetPhysParams(m_type+1, params);
+				if (!pScript0)
+					pActInfo->pEntity->RemoveComponent(pScript);
+
 				ActivateOutput(pActInfo, 0, 0);
 			}
 		}
@@ -1781,18 +1795,14 @@ public:
 		int type = GetType();
 		if (m_inputs.empty())
 		{
-			if (!g_dummyEnt)
+			// Horrible workaround for existing code relying on calling code in init that depends on an entity existing.
+			static std::shared_ptr<IEntityScriptComponent> pScriptComponentDummy;
+			if (pScriptComponentDummy == nullptr)
 			{
-				SEntitySpawnParams esp;
-				esp.sName = "PhysParamsDummy";
-				esp.nFlags = 0;
-				esp.pClass = gEnv->pEntitySystem->GetClassRegistry()->FindClass("Default");
-				g_dummyEnt = gEnv->pEntitySystem->SpawnEntity(esp);
-				SEntityPhysicalizeParams pp;
-				pp.type = PE_STATIC;
-				g_dummyEnt->Physicalize(pp);
+				CryCreateClassInstanceForInterface(cryiidof<IEntityScriptComponent>(), pScriptComponentDummy);
 			}
-			g_dummyEnt->GetOrCreateComponent<IEntityScriptComponent>()->SetPhysParams(type+1, &m_table);
+
+			pScriptComponentDummy->SetPhysParams(type+1, &m_table);
 
 			m_inputs.push_back(InputPortConfig_Void("Set"));
 			for(const auto& str : m_table.m_fields)
@@ -1823,7 +1833,7 @@ public:
 					input.defaultData = TFlowInputData::CreateDefaultInitialized<int>(true);
 				else if (type != 3 && (
 					strstr(str, "heading") || strstr(str, "normal") || strstr(str, "origin") || (subs = (char*)strstr(str, "end")) && subs[-1] != 'b' || 
-					strstr(str, "pivot") || *(short*)&str[0] == 'v' || *(short*)&str[0] == 'w' || !strcmp(str, "wind") ||
+					strstr(str, "pivot") || *(short*)&str[0] == 'v' || *(short*)&str[0] == 'w' || !strcmp(str, "wind") ||	!strncmp(str, "frame", 5) ||
 					(subs = strstr(str, "gravity")) && subs[7] != 'x' && subs[7] != 'y' && subs[7] != 'z'))
 					input.defaultData = TFlowInputData::CreateDefaultInitialized<Vec3>(true);
 				else if (strstr(str, "name"))
@@ -1833,22 +1843,13 @@ public:
 			m_inputs.push_back(SInputPortConfig({ nullptr }));
 		}
 
-		if (g_dummyEnt && type == CRY_ARRAY_COUNT(s_PhysParamNames)-1)
-		{
-			gEnv->pEntitySystem->RemoveEntity(g_dummyEnt->GetId(), true);
-			g_dummyEnt = nullptr;
-		}
-
 		return new CFlowNode_PhysParams2(GetType(), pActInfo, m_inputs.data(), m_table.m_fields.data()); 
 	}
 
 	STableLogger                  m_table;
 	std::vector<SInputPortConfig> m_inputs;
 	std::vector<string>           m_inputNames;
-
-	static IEntity* g_dummyEnt;
 };
-IEntity *CAutoRegParamsNode::g_dummyEnt = nullptr;
 
 CAutoRegParamsNode CAutoRegParamsNode::s_Params[CRY_ARRAY_COUNT(s_PhysParamNames)];
 

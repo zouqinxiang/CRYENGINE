@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "DialogScriptView.h"
@@ -10,6 +10,7 @@
 #include <CryMath/Cry_Camera.h>
 #include "Controls/QuestionDialog.h"
 #include <CryAudio/IObject.h>
+#include <CrySystem/ISystem.h>
 
 #include "Resource.h"
 
@@ -137,12 +138,12 @@ void MyCXTPReportInplaceList::OnLButtonUp(UINT, CPoint point)
 		Cancel();
 }
 
-void MyCXTPReportInplaceList::Cancel(void)
+void MyCXTPReportInplaceList::Cancel()
 {
 	GetOwner()->SetFocus();
 }
 
-void MyCXTPReportInplaceList::Apply(void)
+void MyCXTPReportInplaceList::Apply()
 {
 	if (!pControl)
 		return;
@@ -402,9 +403,9 @@ CDialogScriptView::CDialogScriptView()
 
 	m_pNewInplaceList = new MyCXTPReportInplaceList();
 
-	CryAudio::SCreateObjectData const objectData("Dialog Lines trigger preview", CryAudio::eOcclusionType_Ignore);
+	CryAudio::SCreateObjectData const objectData("Dialog Lines trigger preview", CryAudio::EOcclusionType::Ignore);
 	m_pIAudioObject = gEnv->pAudioSystem->CreateObject(objectData);
-	gEnv->pAudioSystem->AddRequestListener(&CDialogScriptView::OnAudioTriggerFinished, m_pIAudioObject, CryAudio::eSystemEvent_TriggerFinished);
+	gEnv->pAudioSystem->AddRequestListener(&CDialogScriptView::OnAudioTriggerFinished, m_pIAudioObject, CryAudio::ESystemEvents::TriggerFinished);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -1029,21 +1030,16 @@ void CDialogScriptView::PlayLine(int index)
 {
 	StopSound();
 
-	if (m_pScript)
+	if (m_pScript != nullptr && m_pIAudioObject != nullptr)
 	{
 		CXTPReportRecords* pRecords = GetRecords();
 		CDialogScriptRecord* pRecord = static_cast<CDialogScriptRecord*>(pRecords->GetAt(index));
 		const CEditorDialogScript::SScriptLine* pLine = pRecord->GetLine();
-
-		CryAudio::ControlId audioTriggerID = CryAudio::InvalidControlId;
-		gEnv->pAudioSystem->GetAudioTriggerId(pLine->m_audioTriggerName, audioTriggerID);
-		if (audioTriggerID != CryAudio::InvalidControlId && m_pIAudioObject != nullptr)
-		{
-			const CCamera& camera = GetIEditor()->GetSystem()->GetViewCamera();
-			m_pIAudioObject->SetTransformation(camera.GetMatrix());
-			m_pIAudioObject->ExecuteTrigger(audioTriggerID);
-			ms_currentPlayLine = audioTriggerID;
-		}
+		const CCamera& camera = GetIEditor()->GetSystem()->GetViewCamera();
+		m_pIAudioObject->SetTransformation(camera.GetMatrix());
+		CryAudio::ControlId const triggerId = CryAudio::StringToId(pLine->m_audioTriggerName.c_str());
+		m_pIAudioObject->ExecuteTrigger(triggerId);
+		ms_currentPlayLine = triggerId;
 	}
 }
 

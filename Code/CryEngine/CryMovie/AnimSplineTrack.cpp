@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #include "StdAfx.h"
 #include "AnimSplineTrack.h"
@@ -6,8 +6,8 @@
 #include <CryMath/ISplines.h>
 
 CAnimSplineTrack::CAnimSplineTrack(const CAnimParamType& paramType)
-	: m_paramType(paramType)
-	, m_defaultValue(ZERO)
+	: m_defaultValue(ZERO)
+	, m_paramType(paramType)
 {
 }
 

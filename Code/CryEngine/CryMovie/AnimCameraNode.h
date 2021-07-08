@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 #ifndef __animcameranode_h__
 #define __animcameranode_h__
@@ -89,7 +89,7 @@ private:
 
 	ShakeParam m_shakeParam[SHAKE_COUNT];
 
-	ICVar*     m_cv_r_PostProcessEffects;
+	ICVar*     m_cv_r_PostProcessEffects = nullptr;
 };
 
 #endif // __animcameranode_h__

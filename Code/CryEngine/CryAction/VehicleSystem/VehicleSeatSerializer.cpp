@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
    -------------------------------------------------------------------------
@@ -54,7 +54,6 @@ bool CVehicleSeatSerializer::Init(IGameObject* pGameObject)
 		if (!GetGameObject()->BindToNetworkWithParent(eBTNM_Normal, parentId))
 			return false;
 
-	GetEntity()->Activate(0);
 	GetEntity()->Hide(true);
 
 	if (!IsDemoPlayback())
@@ -86,7 +85,7 @@ bool CVehicleSeatSerializer::ReloadExtension(IGameObject* pGameObject, const SEn
 {
 	ResetGameObject();
 
-	CRY_ASSERT_MESSAGE(false, "CVehicleSeatSerializer::ReloadExtension not implemented");
+	CRY_ASSERT(false, "CVehicleSeatSerializer::ReloadExtension not implemented");
 
 	return false;
 }

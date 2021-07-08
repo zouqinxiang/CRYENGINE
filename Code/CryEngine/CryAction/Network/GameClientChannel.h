@@ -1,4 +1,4 @@
-// Copyright 2001-2016 Crytek GmbH / Crytek Group. All rights reserved.
+// Copyright 2001-2018 Crytek GmbH / Crytek Group. All rights reserved.
 
 /*************************************************************************
    -------------------------------------------------------------------------
@@ -134,7 +134,7 @@ struct SClientBatchConsoleVariablesParams : public ISerializable
 			return false;
 		}
 
-		assert(actual < batchLimit);
+		CRY_ASSERT(actual < batchLimit);
 		vars[actual].key = k;
 		vars[actual].value = v;
 		actual++;
